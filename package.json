@@ -2,9 +2,12 @@
   "name": "built-by-faith-app",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": ">=18" },
+  "description": "Built by Faith app: adaptive strength plans, meals, progress and an encouraging AI coach.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "echo No build step needed"
+    "build": "node scripts/build.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

@@ -325,7 +325,14 @@
       root.innerHTML = ["signup", "login", "forgot"].includes(route) ? authForm(route) : welcome();
       return;
     }
-    if (!state.data) await reload();
+    if (!state.data) {
+      try { await reload(); }
+      catch (e) {
+        console.error(e);
+        root.innerHTML = page('<div class="top"><span class="eyebrow">Hang tight</span><h1 class="title">We couldn\'t load your plan.</h1><p class="sub">Check your connection and try again. If it keeps happening, the app may still be finishing setup.</p></div><button class="btn" data-a="retryLoad">Try again</button><button class="btn soft" data-a="signOut">Sign out</button><p class="small muted center">' + esc(e.message || "") + "</p>", null, "no-nav");
+        return;
+      }
+    }
     const p = state.data.profile;
     if (!p || !p.setup || !p.setup.programs) {
       if (route !== "setup") return go("#/setup/0");
@@ -342,6 +349,7 @@
 
   // ---------- actions ----------
   const A = {
+    retryLoad() { state.data = null; render(); },
     async resetDemo() { await S.deleteData(); state.user = null; state.data = null; state.setup = null; go("#/welcome"); },
     pick(el) {
       const [key, val, multi] = JSON.parse(el.dataset.v);

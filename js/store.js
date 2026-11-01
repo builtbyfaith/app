@@ -78,7 +78,7 @@
     async saveProfile(patch) {
       if (!live) { const d = readDemo(); d.profile = Object.assign({}, d.profile, patch); writeDemo(d); return; }
       const u = await this.user();
-      must(await sb.from("profiles").update(patch).eq("id", u.id));
+      must(await sb.from("profiles").upsert(Object.assign({ id: u.id }, patch), { onConflict: "id" }));
     },
 
     async saveWorkout(w) {
