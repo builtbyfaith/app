@@ -53,6 +53,12 @@
       if (error) throw new Error(error.message);
     },
 
+    async resendConfirm(email) {
+      if (!live) return;
+      const { error } = await sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: cfg.siteUrl || location.origin } });
+      if (error) throw new Error(error.message);
+    },
+
     async setPassword(pw) { if (live) must(await sb.auth.updateUser({ password: pw })); },
 
     async signOut() { if (!live) { const d = readDemo(); d.user = null; writeDemo(d); return; } await sb.auth.signOut(); },

@@ -27,19 +27,27 @@
   const opt = (on, label, small, action, val) => '<button class="opt' + (on ? " on" : "") + '" data-a="' + action + '" data-v="' + esc(val) + '" aria-pressed="' + on + '">' + "<span>" + esc(label) + (small ? "<small>" + esc(small) + "</small>" : "") + '</span><span class="tk">' + I.check + "</span></button>";
 
   async function reload() { state.data = await S.load(); }
+  let memPending = null;
+  const PKEY = "bbf_pending_setup";
+  function loadPending() { try { const v = localStorage.getItem(PKEY); return v ? JSON.parse(v) : memPending; } catch (e) { return memPending; } }
+  function savePending(s) { memPending = s; try { localStorage.setItem(PKEY, JSON.stringify(s)); } catch (e) {} }
+  function clearPending() { memPending = null; try { localStorage.removeItem(PKEY); } catch (e) {} }
+  const blankSetup = () => ({ programs: [], place: [], injuries: [], allergies: [] });
+  const bloom = (n, total) => { const cols = ["#E9765F", "#8FCDC6", "#E7D58E", "#F3B4A7", "#8FCDC6", "#E9765F", "#E7D58E", "#F3B4A7", "#8FCDC6"]; let s = '<svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true">'; for (let k = 0; k < total; k++) { if (k < n) s += '<ellipse cx="50" cy="22" rx="12" ry="20" fill="' + cols[k % cols.length] + '" transform="rotate(' + (k * 360 / total) + ' 50 50)"/>'; } return s + '<circle cx="50" cy="50" r="11" fill="#E7DCA2"/></svg>'; };
   async function act(fn) { if (state.busy) return; state.busy = true; try { await fn(); } catch (e) { toast(e.message || "Something went wrong. Please try again."); } finally { state.busy = false; } }
 
   // ---------- auth screens ----------
   function welcome() {
     return page('<div class="top" style="min-height:300px;justify-content:flex-end">' + flower("#F0A99C", 46, "right:20px;top:" + (30) + "px") + flower("#9ED3CF", 28, "right:80px;top:110px;animation-delay:-1.5s") + flower("#E7DCA2", 34, "left:22px;top:60px;animation-delay:-.8s") +
       '<span class="eyebrow">Built by Faith</span><h1 class="title" style="font-size:36px">Stronger in every season.</h1><p class="sub">Strength plans that adapt to you every week, with meals, progress and encouragement built in.</p></div>' +
-      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:auto"><a class="btn" href="#/signup">Create my account</a><a class="btn soft" href="#/login">I already have an account</a></div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:auto"><a class="btn" href="#/setup/0">Find my program</a><p class="small muted center">Six quick questions. No account needed to start.</p><a class="btn soft" href="#/login">I already have an account</a></div>' +
       word(E.dailyWord()), null, "no-nav");
   }
 
   function authForm(kind) {
     const titles = { signup: ["Create your account", "Let's get you set up. It takes about two minutes."], login: ["Welcome back", "Good to see you again."], forgot: ["Reset your password", "We'll email you a link to choose a new one."], "new-password": ["Choose a new password", "Use at least 8 characters."] };
-    const [t, s] = titles[kind];
+    let [t, s] = titles[kind];
+    if (kind === "signup" && loadPending()) { t = "Save your plan"; s = "Create your account to start your plan. It takes 30 seconds."; }
     let fields = "";
     if (kind === "signup") fields += '<div class="field"><label for="nm">First name</label><input id="nm" autocomplete="given-name" required></div>';
     if (kind !== "new-password") fields += '<div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required></div>';
@@ -78,10 +86,32 @@
     if (st.dislikes) body += '<div class="field"><label for="dl">Foods you just don\'t like (optional)</label><input id="dl" placeholder="e.g. mushrooms, olives" value="' + esc(s.dislikes || "") + '"></div>';
     const ready = st.date ? true : st.multi ? (val || []).length > 0 : val != null;
     const last = n === steps.length - 1;
-    return page('<div class="top">' + flower("#9ED3CF", 30, "right:18px;top:22px") +
-      '<div class="row"><button class="icon-btn" data-a="setupBack" aria-label="Back">' + I.back + '</button><span class="chip" style="background:#fff">Step ' + (n + 1) + " of " + steps.length + '</span><b>' + pct + '%</b></div><div class="progress"><i style="width:' + pct + '%"></i></div>' +
+    return page('<div class="top">' +
+      '<div class="row"><button class="icon-btn" data-a="setupBack" aria-label="Back">' + I.back + '</button><span class="chip" style="background:#fff">Step ' + (n + 1) + " of " + steps.length + '</span>' + bloom(n, steps.length) + '</div><div class="progress"><i style="width:' + pct + '%"></i></div>' +
       '<span class="eyebrow">' + st.eb + '</span><h1 class="title">' + st.q + '</h1><p class="sub">' + st.hint + "</p></div>" + body +
       '<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px"><p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">' + esc(E.affirmation("start", n)) + '</p><button class="btn" data-a="setupNext" ' + (ready ? "" : "disabled") + ">" + (last ? "Build my plan" : "Continue") + "</button></div>", null, "no-nav");
+  }
+
+  // ---------- quiz result (before an account) ----------
+  function resultScreen() {
+    const s = loadPending();
+    if (!s || !s.programs || !s.programs.length) { go("#/setup/0"); return ""; }
+    const prof = { setup: s, progression: {}, settings: {} };
+    const plan = E.buildToday(prof, []);
+    const names = s.programs.map(k => C.PROGRAMS[k].name);
+    const why = [
+      s.experience === "never" ? "Starts gently, with simple moves and clear cues." : s.experience === "regular" ? "Progresses faster, matched to your experience." : "Starts just above where you are and builds each week.",
+      s.days + " days a week, about " + s.minutes + " minutes each.",
+      (s.injuries && s.injuries.length ? "Exercises are swapped to protect your " + s.injuries.join(" and ") + "." : "Every workout uses only the space and equipment you picked."),
+      "Meals fit your " + (s.diet || "balanced") + " way of eating" + (s.allergies && s.allergies.length ? ", with no " + s.allergies.join(", ") : "") + "."
+    ];
+    const first = plan.run ? '<p class="small">' + esc(plan.run.detail) + "</p>" : plan.exercises.map(x => '<div class="ex"><span>' + esc(x.name) + "</span><b>" + x.sets + " × " + (x.kind === "time" ? x.secs + " s" : x.reps) + "</b></div>").join("");
+    return page('<div class="top" style="min-height:220px;justify-content:flex-end">' + flower("#F0A99C", 44, "right:18px;top:26px") + flower("#9ED3CF", 28, "right:76px;top:90px;animation-delay:-1s") + flower("#E7DCA2", 30, "left:20px;top:40px;animation-delay:-2s") +
+      '<span class="eyebrow">Your plan is in full bloom</span><h1 class="title" style="font-size:32px">' + esc(names[0]) + "</h1>" + (names.length > 1 ? '<div class="chips">' + names.slice(1).map(n => '<span class="chip" style="background:#fff">+ ' + esc(n) + "</span>").join("") + "</div>" : "") + '<p class="sub">' + esc(C.PROGRAMS[s.programs[0]].short) + "</p></div>" +
+      '<div class="card"><span class="label">Why it fits you</span><ul class="list small">' + why.map(w => "<li>" + esc(w) + "</li>").join("") + "</ul></div>" +
+      '<div class="card"><span class="label">Your first workout</span><div class="ex"><h3>' + esc(plan.name) + '</h3><span class="small muted">' + plan.minutes + " min</span></div>" + first + "</div>" +
+      '<a class="btn" href="#/signup">Create my account to start</a><a class="btn soft" href="#/login">I already have an account</a><button class="link center" data-a="redoQuiz">Change my answers</button>' +
+      '<p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">' + esc(E.affirmation("start")) + "</p>", null, "no-nav");
   }
 
   // ---------- plans (paywall) ----------
@@ -322,6 +352,8 @@
     window.scrollTo && route !== "coach" && route !== "workout" && window.scrollTo(0, 0);
     if (route === "new-password") { root.innerHTML = authForm("new-password"); return; }
     if (!state.user) {
+      if (route === "setup") { if (!state.setup) state.setup = loadPending() || blankSetup(); root.innerHTML = setupScreen(+a || 0); return; }
+      if (route === "result") { root.innerHTML = resultScreen(); return; }
       root.innerHTML = ["signup", "login", "forgot"].includes(route) ? authForm(route) : welcome();
       return;
     }
@@ -333,7 +365,11 @@
         return;
       }
     }
-    const p = state.data.profile;
+    let p = state.data.profile;
+    const pending = loadPending();
+    if ((!p || !p.setup || !p.setup.programs) && pending && pending.programs && pending.programs.length) {
+      try { await S.saveProfile({ setup: pending }); clearPending(); state.setup = null; await reload(); p = state.data.profile; toast("Your plan is saved."); } catch (e) { toast(e.message); }
+    }
     if (!p || !p.setup || !p.setup.programs) {
       if (route !== "setup") return go("#/setup/0");
       if (!state.setup) state.setup = { programs: [], place: [], injuries: [], allergies: [] };
@@ -350,6 +386,7 @@
   // ---------- actions ----------
   const A = {
     retryLoad() { state.data = null; render(); },
+    async resendConfirm() { await act(async () => { await S.resendConfirm(state.pendingEmail); toast("Sent again. Check your inbox and spam folder."); }); },
     async resetDemo() { await S.deleteData(); state.user = null; state.data = null; state.setup = null; go("#/welcome"); },
     pick(el) {
       const [key, val, multi] = JSON.parse(el.dataset.v);
@@ -363,13 +400,24 @@
       const dl = document.getElementById("dl"); if (dl) s.dislikes = dl.value;
       const y = window.scrollY; render(); window.scrollTo(0, y);
     },
-    setupBack() { const n = +(location.hash.split("/")[2] || 0); if (n > 0) go("#/setup/" + (n - 1)); else if (state.data.profile.setup && state.data.profile.setup.programs) { state.setup = null; go("#/profile"); } },
+    setupBack() {
+      const n = +(location.hash.split("/")[2] || 0);
+      if (n > 0) return go("#/setup/" + (n - 1));
+      if (!state.user) { savePending(state.setup); return go("#/welcome"); }
+      if (state.data && state.data.profile.setup && state.data.profile.setup.programs) { state.setup = null; go("#/profile"); }
+    },
+    redoQuiz() { state.setup = loadPending() || blankSetup(); go("#/setup/0"); },
     noRace() { state.setup.raceDate = null; A.setupNext(); },
     async setupNext() {
       const s = state.setup, n = +(location.hash.split("/")[2] || 0), steps = stepsFor(s);
       const dl = document.getElementById("dl"); if (dl) s.dislikes = dl.value.trim();
       const rd = document.getElementById("rd"); if (rd) s.raceDate = rd.value || null;
+      if (!state.user) savePending(s);
       if (n < steps.length - 1) return go("#/setup/" + (n + 1));
+      if (!state.user) {
+        s.injuries = (s.injuries || []).filter(x => x !== "none"); s.allergies = (s.allergies || []).filter(x => x !== "none");
+        savePending(s); state.setup = null; return go("#/result");
+      }
       await act(async () => {
         s.injuries = (s.injuries || []).filter(x => x !== "none"); s.allergies = (s.allergies || []).filter(x => x !== "none");
         await S.saveProfile({ setup: s });
@@ -436,14 +484,18 @@
       if (pw.length < 8) return err("Use at least 8 characters for your password.");
       await act(async () => {
         const r = await S.signUp(nm, em, pw);
-        if (r.needsConfirm) { root.innerHTML = page('<h1 class="title">Check your email</h1><p class="sub">We sent a link to ' + esc(em) + '. Tap it to confirm your account, then come back and sign in.</p><a class="btn" href="#/login">Go to sign in</a>', null, "no-nav"); return; }
-        state.user = await S.user(); state.data = null; if (!S.live) await S.saveProfile({ name: nm }); go("#/setup/0");
+        if (r.needsConfirm) { state.pendingEmail = em; root.innerHTML = page('<h1 class="title">Check your email</h1><p class="sub">We sent a confirmation link to ' + esc(em) + '. Tap it to confirm your account, then come back and sign in.</p><p class="small muted">Don\'t see it after a few minutes? Check your spam or promotions folder.</p><a class="btn" href="#/login">Go to sign in</a><button class="btn soft" data-a="resendConfirm">Resend the email</button>', null, "no-nav"); return; }
+        state.user = await S.user(); state.data = null; if (!S.live) await S.saveProfile({ name: nm }); go("#/today");
       });
     },
     async login() {
       const em = val("em"), pw = val("pw");
       if (!em || !pw) return err("Enter your email and password.");
-      await act(async () => { await S.signIn(em, pw); state.user = await S.user(); state.data = null; go("#/today"); });
+      await act(async () => {
+        try { await S.signIn(em, pw); }
+        catch (e) { if (/confirm/i.test(e.message)) { state.pendingEmail = em; root.innerHTML = page('<h1 class="title">Confirm your email first</h1><p class="sub">Tap the link we sent to ' + esc(em) + ', then sign in again.</p><button class="btn" data-a="resendConfirm">Resend the email</button><a class="btn soft" href="#/login">Back to sign in</a>', null, "no-nav"); return; } throw e; }
+        state.user = await S.user(); state.data = null; go("#/today");
+      });
     },
     async forgot() {
       const em = val("em");
