@@ -33,6 +33,8 @@ function describe(profile, workouts, daily) {
     }).join("; ");
     lines.push("Workout " + w.date + ": " + (w.name || "") + ", " + (w.minutes || "?") + " min, felt " + ({ easy: "easy", right: "just right", hard: "tough" }[w.effort] || "okay") + (w.energy === "low" ? ", low-energy day" : "") + (ex ? ". " + ex : ""));
   });
+  const food = daily.filter(d => d.meals && d.meals._x && d.meals._x.totals).map(d => { const t = d.meals._x.totals; return d.date + ": " + t.kcal + " cal, " + t.protein + " g protein, " + t.water + " cups water" + (d.meals._x.fast ? ", fast completed" : ""); });
+  if (food.length) lines.push("Nutrition logged: " + food.join("; ") + ".");
   const steps = daily.filter(d => d.steps).map(d => d.date + ": " + d.steps);
   if (steps.length) lines.push("Steps: " + steps.join(", ") + ".");
   return lines.join("\n").slice(0, 3500);
@@ -65,7 +67,7 @@ exports.handler = async (event) => {
   const [p, w, d] = await Promise.all([
     db.from("profiles").select("name,setup").eq("id", user.id).maybeSingle(),
     db.from("workout_logs").select("date,name,energy,effort,minutes,exercises").eq("user_id", user.id).gte("date", from).order("date").order("id"),
-    db.from("daily_logs").select("date,steps").eq("user_id", user.id).gte("date", day(Date.now() - 7 * 86400000)).order("date")
+    db.from("daily_logs").select("date,steps,meals").eq("user_id", user.id).gte("date", day(Date.now() - 7 * 86400000)).order("date")
   ]);
   const profile = p.data || {};
   const workouts = w.data || [];
@@ -74,7 +76,7 @@ exports.handler = async (event) => {
 
   let text;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST", signal: ctrl.signal,

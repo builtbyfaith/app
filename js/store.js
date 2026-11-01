@@ -17,7 +17,7 @@
   async function call(fn, body) {
     const t = await token();
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 25000);
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     let r;
     try { r = await fetch("/.netlify/functions/" + fn, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", Authorization: "Bearer " + t }, body: JSON.stringify(body || {}) }); }
     catch (e) { const err = new Error("You seem to be offline. Please check your connection and try again."); err.network = true; throw err; }

@@ -76,6 +76,17 @@ p{margin:0}
 .recipe-row .btn{align-self:flex-start}
 .toast{animation:pop .25s ease-out}
 @keyframes pop{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}}
+.nbar{display:flex;flex-direction:column;gap:4px}
+.macros{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px}
+.macros span{background:var(--bg);border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:center}
+.macros b{font-size:15px}.macros small{font-size:11px;color:var(--muted);font-weight:700}
+.water{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.water-btns{display:flex;gap:6px}.water-btns .btn{width:auto;min-width:44px}
+.food-form{display:flex;flex-direction:column;gap:8px}
+.food-form input,.field select{min-height:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);padding:8px 10px;width:100%;font:inherit}
+.check-row{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.check-row input{width:20px;height:20px;accent-color:var(--coral)}
+.fast-card{background:linear-gradient(135deg,#FFF8F0,#F3F8F6)}
 /* welcome card */
 .hero-card{background:#FFFDF9;border:1px solid var(--line);border-radius:30px;overflow:hidden;box-shadow:0 24px 60px rgba(31,42,51,.08)}
 .hc-top{position:relative;padding:22px 20px 22px;background:linear-gradient(135deg,#F6E5DE 0%,#E6F2EF 55%,#F7F1DC 100%);display:flex;flex-direction:column;gap:8px}

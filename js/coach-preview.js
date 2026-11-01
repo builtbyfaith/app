@@ -28,6 +28,14 @@
     return { name: (p.name || "").split(" ")[0], s, plan, low, away, last, meals, injuries, gains, stepsY, prog: E.mainProgram(s), race: E.raceWeeks(s), total: d.workouts.length };
   }
   const nm = f => f.name ? ", " + f.name : "";
+  const FASTH = { "12:12": 12, "14:10": 10, "16:8": 8, "18:6": 6 };
+  function nutrition(d) {
+    const t = E.dateStr(), day = d.daily[t] || {}, x = (day.meals && day.meals._x) || {}, st = d.profile.settings || {}, n = st.nutrition || {};
+    const tot = { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, water: x.water || 0 };
+    E.mealsFor(d.profile.setup, day).filter(m => m.status === "ate").forEach(m => { tot.kcal += m.recipe.kcal || 0; tot.protein += m.recipe.protein; tot.carbs += m.recipe.carbs || 0; tot.fat += m.recipe.fat || 0; tot.fiber += m.recipe.fiber || 0; });
+    (x.foods || []).forEach(f => { tot.kcal += +f.kcal || 0; tot.protein += +f.p || 0; tot.carbs += +f.c || 0; tot.fat += +f.f || 0; });
+    return { tot, goalK: n.kcal || null, goalP: n.protein || 100, goalW: n.water || 8, fast: st.fasting || { plan: "none" } };
+  }
 
   const RECOVERY = {
     glp1: "Have protein first at your next meal to protect the muscle you just worked.",
@@ -101,8 +109,20 @@
       const workoutQ = has(t, ["today", "workout", "what should i do", "what do i do", "plan for"]);
       const progressQ = has(t, ["progress", "stronger", "how am i doing", "improv", "results", "lifted"]);
       const raceQ = has(t, ["race", "5k", "10k", "marathon", "run "]);
+      const calQ = has(t, ["calorie", "calories", "macro", "carbs", " fat ", "how much have i eaten", "how much did i eat", "water", "hydrat", "intake", "track"]);
+      const fastQ = has(t, ["fast", "intermittent", "eating window", "16:8", "14:10", "18:6", "12:12", "skip breakfast"]);
       if (/(kill myself|suicide|end my life|hurt myself|self[- ]harm|want to die)/.test(t) || has(t, ["chest pain", "can't breathe", "fainted"])) return null; // safety answers come from the saved library
 
+      if (calQ) {
+        const n = nutrition(d), T = n.tot;
+        parts.push("So far today" + nm(f) + ": " + T.kcal + " calories" + (n.goalK ? " of your " + n.goalK + " goal" : "") + ", " + T.protein + " of " + n.goalP + " g protein, " + T.carbs + " g carbs, " + T.fat + " g fat and " + T.water + " of " + n.goalW + " cups of water. " +
+          (T.protein < n.goalP * 0.5 ? "Your next meal is a great place for protein. " : "Nice work on protein. ") + (T.water < n.goalW / 2 ? "Grab a glass of water now, too." : "You're doing well on water.") + " Tap Ate it on the Eat tab, or add your own foods, and these numbers update.");
+      }
+      if (fastQ) {
+        const fp = nutrition(d).fast;
+        if (FASTH[fp.plan]) parts.push("You're on " + fp.plan + " fasting with your eating window starting at " + (fp.start || "12:00") + ". Drink water, black coffee or tea while you fast, and open your window with protein. If you feel shaky or dizzy, eat something and ease up. Flexibility is part of a healthy plan.");
+        else parts.push("Want to try intermittent fasting" + nm(f) + "? A gentle start is 12:12 (for example eating 8 AM to 8 PM), then 14:10 if it feels good. Set it up on the Eat tab under Goals, and the app will show your fasting timer. It isn't right for everyone: check with your doctor first if you're pregnant, have diabetes, take blood sugar or GLP-1 medicine, or have a history of disordered eating.");
+      }
       if (hurt) {
         const parts2 = body.map(b => SWAP[b]).filter(Boolean);
         const hit = plan.exercises.filter(x => body.some(b => SWAP[b] && SWAP[b].avoid.includes(x.slot)));
@@ -115,11 +135,11 @@
       }
       if (food) {
         const m = f.meals.filter(x => x.recipe && x.status !== "ate").slice(0, 3);
-        parts.push(m.length ? "From your meal plan today: " + list(m.map(x => x.recipe.name + " (" + x.recipe.protein + " g protein, " + x.recipe.minutes + " min)")) + ". They all fit how you eat. Tap Swap on the Eat tab if one doesn't sound good." : "You've eaten all your planned meals today. Well done! If you're hungry, choose a snack with protein like Greek yogurt, eggs or hummus.");
+        parts.push(m.length ? "From your meal plan today: " + list(m.map(x => x.recipe.name + " (" + x.recipe.protein + " g protein, " + x.recipe.kcal + " cal, " + x.recipe.minutes + " min)")) + ". They all fit how you eat. Tap Swap on the Eat tab if one doesn't sound good." : "You've eaten all your planned meals today. Well done! If you're hungry, choose a snack with protein like Greek yogurt, eggs or hummus.");
       }
       if (progressQ) parts.push(f.total ? "You've logged " + f.total + " workout" + (f.total === 1 ? "" : "s") + (f.gains.length ? ", and your " + list(f.gains.slice(0, 2).map(g => g.name.toLowerCase() + " went from " + g.from + " to " + g.to + " lb")) : "") + ". You've done " + plan.doneWeek + " of " + plan.target + " this week. Keep stacking faithful days." : "Your progress starts with your first workout. Today's " + plan.name + " is the perfect place to begin.");
       if (raceQ && f.race !== null) parts.push(f.race >= 0 ? f.race + " weeks to race day. Keep most runs at an easy, talking pace, and keep your strength days. " + (f.race <= 2 ? "You're in your taper now, so less is more." : "") : "Your race date has passed. Congratulations on showing up! Set a new race in your profile whenever you're ready.");
-      if (workoutQ && !parts.length) parts.push(plan.run ? "Today: " + plan.run.name + ". " + plan.run.detail + " " + plan.run.cue : "Today's " + plan.name + nm(f) + ", about " + plan.minutes + " minutes: " + list(plan.exercises.map(x => x.name.toLowerCase() + " " + dose(x))) + ". Warm up for 5 minutes first, and rate how it felt at the end so your next session fits even better.");
+      if (workoutQ && !parts.length && !calQ) parts.push(plan.run ? "Today: " + plan.run.name + ". " + plan.run.detail + " " + plan.run.cue : "Today's " + plan.name + nm(f) + ", about " + plan.minutes + " minutes: " + list(plan.exercises.map(x => x.name.toLowerCase() + " " + dose(x))) + ". Warm up for 5 minutes first, and rate how it felt at the end so your next session fits even better.");
       return parts.length ? parts.join("\n\n") : null; // nothing personal to add: use the saved library
     }
   };

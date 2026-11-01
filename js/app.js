@@ -50,6 +50,9 @@
     coach: { name: "AI Coach", price: "$9.99", per: "/month", items: [
       "Everything in Core",
       "Coach Faith AI: real, personal answers about your plan",
+      "Calorie, protein, carb, fat, fiber and water tracking",
+      "Add your own foods and set your own goals",
+      "Intermittent fasting timer (12:12 to 18:6)",
       "Help with swaps, tired days, meals and motivation, any time"] }
   };
   const isPaid = () => ["core", "coach"].includes(state.data.plan);
@@ -67,6 +70,77 @@
   const fmtDay = ms => new Date(ms).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   const trialEndText = () => fmtDay(trial().start + TRIAL_DAYS * 86400000);
   // During the trial, small tags show which plan keeps each feature
+  // ---- wellness tools (AI Coach plan, and during the trial) ----
+  const wellness = () => tier() === "coach" || tier() === "trial";
+  const FASTS = { none: 0, "12:12": 12, "14:10": 10, "16:8": 8, "18:6": 6 };
+  function nGoals() {
+    const st = (state.data.profile.settings || {}), n = st.nutrition || {};
+    const lastW = (state.data.body || []).slice(-1)[0];
+    const protein = n.protein || (lastW ? Math.max(60, Math.min(160, Math.round(lastW.weight * 0.7 / 5) * 5)) : 100);
+    return { kcal: n.kcal || null, protein, water: n.water || 8, fiber: 25, showKcal: n.showKcal !== false, fast: st.fasting || { plan: "none", start: "12:00" } };
+  }
+  const xOf = (day) => ((day && day.meals && day.meals._x) || { foods: [], water: 0 });
+  function nTotals(dateKey) {
+    const day = state.data.daily[dateKey] || {}, x = xOf(day), setup = state.data.profile.setup;
+    const t = { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, water: x.water || 0 };
+    E.mealsFor(setup, day, E.parseDate(dateKey)).filter(m => m.status === "ate").forEach(m => { t.kcal += m.recipe.kcal || 0; t.protein += m.recipe.protein || 0; t.carbs += m.recipe.carbs || 0; t.fat += m.recipe.fat || 0; t.fiber += m.recipe.fiber || 0; });
+    (x.foods || []).forEach(f => { t.kcal += +f.kcal || 0; t.protein += +f.p || 0; t.carbs += +f.c || 0; t.fat += +f.f || 0; t.fiber += +f.fib || 0; });
+    Object.keys(t).forEach(k => t[k] = Math.round(t[k]));
+    return t;
+  }
+  const hm = (date) => date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return (m >= 60 ? Math.floor(m / 60) + "h " : "") + (m % 60) + "m"; };
+  function fastStatus() {
+    const g = nGoals().fast, hours = FASTS[g.plan];
+    if (!hours) return null;
+    const [h, mi] = (g.start || "12:00").split(":").map(Number), now = new Date();
+    const open = new Date(now); open.setHours(h, mi, 0, 0);
+    let close = new Date(open.getTime() + hours * 3600000);
+    if (now < open && new Date(open.getTime() - 86400000 + hours * 3600000) > now) { open.setDate(open.getDate() - 1); close = new Date(open.getTime() + hours * 3600000); }
+    const eating = now >= open && now < close;
+    const nextOpen = now < open ? open : new Date(open.getTime() + 86400000);
+    return { plan: g.plan, eating, text: eating ? "Eating window open · closes " + hm(close) + " (" + span(close - now) + " left)" : "Fasting · eating window opens " + hm(nextOpen) + " (in " + span(nextOpen - now) + ")", window: hm(open) + "–" + hm(close) };
+  }
+  // Save a change to today's tracking (foods, water, fast) together with fresh totals for the coach
+  async function saveX(mut, msg) {
+    const t = today(), day = state.data.daily[t] || {}, meals = JSON.parse(JSON.stringify(day.meals || {}));
+    const x = meals._x || { foods: [], water: 0 }; mut(x); meals._x = x;
+    await quick(d => { d.daily[t] = Object.assign({ date: t }, d.daily[t], { meals }); d.daily[t].meals._x.totals = nTotals(t); }, () => S.saveDaily(t, { meals: state.data.daily[t].meals }), msg);
+  }
+  function nutritionCard() {
+    if (!wellness()) return '<div class="card upsell"><span class="label" style="display:flex;align-items:center;gap:6px;color:var(--coral)">' + lock + ' AI Coach feature</span><h3>Track calories, protein, water and fasting</h3><p class="small">See what you eat add up, log your own foods, and follow an intermittent fasting plan with Coach Faith cheering you on.</p><a class="btn" href="#/plans">See AI Coach</a></div>';
+    const g = nGoals(), t = nTotals(today()), x = xOf(state.data.daily[today()]);
+    const bar = (label, val, goal, unit, col) => '<div class="nbar"><div class="ex small"><span>' + label + '</span><b>' + val.toLocaleString() + (goal ? " / " + goal.toLocaleString() : "") + " " + unit + '</b></div><div class="progress" style="background:#F1E7E0"><i style="width:' + (goal ? Math.min(100, Math.round(val / goal * 100)) : 0) + "%;background:" + col + '"></i></div></div>';
+    const fs = fastStatus();
+    return '<div class="card"><div class="ex"><span class="label">Today\'s nutrition ' + ptag("coach") + '</span><a class="link small" style="padding:0" href="#/nutrition">Goals</a></div>' +
+      (g.showKcal ? bar("Calories", t.kcal, g.kcal, "cal", "#C4553E") : "") + bar("Protein", t.protein, g.protein, "g", "#3E9E96") +
+      '<div class="macros"><span><b>' + t.carbs + ' g</b><small>carbs</small></span><span><b>' + t.fat + ' g</b><small>fat</small></span><span><b>' + t.fiber + " / " + g.fiber + ' g</b><small>fiber</small></span></div>' +
+      '<div class="water"><span class="small"><b>Water</b> ' + t.water + " of " + g.water + ' cups</span><div class="water-btns"><button class="btn small soft" data-a="water" data-v="-1" aria-label="Remove a cup">−</button><button class="btn small" data-a="water" data-v="1">+ Cup</button></div></div>' +
+      ((x.foods || []).length ? '<ul class="list small">' + x.foods.map((f, i) => '<li><span style="flex:1"><b>' + esc(f.n) + '</b><br><span class="muted">' + (+f.kcal || 0) + " cal · " + (+f.p || 0) + ' g protein</span></span><button class="link" data-a="delFood" data-v="' + i + '" aria-label="Remove ' + esc(f.n) + '">Remove</button></li>').join("") + "</ul>" : "") +
+      (state.foodOpen ? '<form data-f="food" class="food-form"><input id="fn" maxlength="60" placeholder="Food, like Banana" required><div class="opts grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:6px"><input id="fk" type="number" inputmode="numeric" placeholder="Cal"><input id="fp" type="number" inputmode="numeric" placeholder="Protein g"><input id="fc" type="number" inputmode="numeric" placeholder="Carbs g"><input id="ff" type="number" inputmode="numeric" placeholder="Fat g"></div><div class="confirm"><button class="btn small soft" type="button" data-a="foodToggle">Cancel</button><button class="btn small" type="submit">Add food</button></div></form>'
+        : '<button class="btn soft small" data-a="foodToggle">+ Add your own food</button>') +
+      '<p class="small muted">Numbers are estimates from your recipes and the foods you add.</p></div>' +
+      (fs ? '<div class="card fast-card"><div class="ex"><span class="label">Intermittent fasting · ' + fs.plan + " " + ptag("coach") + '</span><a class="link small" style="padding:0" href="#/nutrition">Change</a></div><p><b>' + esc(fs.text) + '</b></p><p class="small muted">Eating window ' + fs.window + ". Plan your meals inside it.</p>" +
+        (x.fast ? '<p class="small" style="color:var(--sage);font-weight:800">Today\'s fast is complete. Well done!</p>' : '<button class="btn soft small" data-a="fastDone">Mark today\'s fast complete</button>') + "</div>" : "");
+  }
+  function nutritionScreen() {
+    if (!wellness()) { go("#/plans"); return ""; }
+    const g = nGoals(), fs = g.fast;
+    const sel = (id, vals, cur) => '<select id="' + id + '">' + vals.map(v => '<option value="' + v[0] + '"' + (String(cur) === String(v[0]) ? " selected" : "") + ">" + v[1] + "</option>").join("") + "</select>";
+    const times = []; for (let h = 6; h <= 14; h++) times.push([String(h).padStart(2, "0") + ":00", hm(new Date(2020, 0, 1, h))]);
+    return page('<div class="top"><div class="row"><a class="icon-btn" href="#/eat" aria-label="Back to meals">' + I.back + '</a></div><span class="eyebrow">Nutrition and fasting ' + ptag("coach") + '</span><h1 class="title">Your goals</h1><p class="sub">Set what helps you. Leave calories blank if you\'d rather not count them.</p></div>' +
+      '<form data-f="ngoals" style="display:flex;flex-direction:column;gap:12px"><div class="card">' +
+      '<div class="field"><label for="gk">Daily calories (optional)</label><input id="gk" type="number" inputmode="numeric" min="1200" max="4000" placeholder="Not set" value="' + (g.kcal || "") + '"></div>' +
+      '<div class="field"><label for="gp">Daily protein (grams)</label><input id="gp" type="number" inputmode="numeric" min="40" max="250" value="' + g.protein + '"></div>' +
+      '<div class="field"><label for="gw">Water (cups)</label>' + sel("gw", [[6, "6 cups"], [8, "8 cups"], [10, "10 cups"], [12, "12 cups"]], g.water) + "</div>" +
+      '<label class="check-row"><input id="gs" type="checkbox"' + (g.showKcal ? " checked" : "") + "> Show calories</label></div>" +
+      '<div class="card"><span class="label">Intermittent fasting</span>' +
+      '<div class="field"><label for="fpn">Plan</label>' + sel("fpn", [["none", "Not fasting"], ["12:12", "12:12 · gentle start"], ["14:10", "14:10"], ["16:8", "16:8 · most popular"], ["18:6", "18:6"]], fs.plan) + "</div>" +
+      '<div class="field"><label for="fst">Eating window starts</label>' + sel("fst", times, fs.start || "12:00") + "</div>" +
+      '<p class="note">Fasting isn\'t right for everyone. Check with your doctor first if you\'re pregnant or breastfeeding, have diabetes or take blood sugar medication (including GLP-1 medicines), or have a history of disordered eating.</p></div>' +
+      '<button class="btn" type="submit">Save my goals</button></form>', "eat");
+  }
+
   const ptag = k => tier() === "trial" ? '<span class="ptag ptag-' + k + '">' + (k === "coach" ? "AI Coach" : "Core") + "</span>" : "";
   // Members without the AI coach get saved replies: the starter set on Free, the full library otherwise.
   const basicCoach = () => tier() === "free";
@@ -285,6 +359,7 @@
     return page('<div class="top">' + flower("#F0A99C", 34, "right:16px;top:80px") +
       '<div class="row"><span class="eyebrow">' + new Date().toLocaleDateString(undefined, { weekday: "long" }) + " · " + esc(C.PROGRAMS[E.mainProgram(p.setup)].name) + '</span><a class="icon-btn" href="#/profile" aria-label="Profile and settings">' + I.user + "</a></div>" +
       '<h1 class="title">' + greet + (firstName() ? ", " + esc(firstName()) : "") + ".</h1>" + word(E.dailyWord()) +
+      (wellness() && fastStatus() ? '<a class="trial-pill" href="#/eat" style="background:' + (fastStatus().eating ? "#E3F2EF" : "#FBEFE6") + '"><span>' + esc(fastStatus().text) + '</span><b>' + fastStatus().plan + '</b></a>' : "") +
       (tier() === "trial" ? '<a class="trial-pill" href="#/plans"><span>Free trial · ' + trial().daysLeft + (trial().daysLeft === 1 ? " day" : " days") + ' left</span><b>See plans</b></a>'
         : tier() === "free" ? '<a class="trial-pill" href="#/plans"><span>Free plan · ' + Math.max(0, FREE_WORKOUTS - plan.doneWeek) + ' of ' + FREE_WORKOUTS + ' workouts left this week</span><b>Upgrade</b></a>' : "") +
       '<div class="rings">' + ring(plan.doneWeek / plan.target * 100, "#C4553E", "This week", plan.doneWeek + "/" + plan.target) + ring(steps / stepGoal * 100, "#3E9E96", "Steps", steps >= 1000 ? (steps / 1000).toFixed(1) + "k" : String(steps), "stepsToggle") + ring(ate / Math.max(1, meals.length) * 100, "#A8892A", "Meals", ate + "/" + meals.length) + "</div>" +
@@ -293,7 +368,7 @@
       (away !== null && away >= 5 && !doneToday && !capped ? '<div class="card" style="background:var(--butter-soft);border-color:transparent"><h3>' + esc(E.affirmation("back")) + '</h3><p class="small">It\'s been ' + away + ' days. Let\'s ease back in with a gentle session.</p><button class="btn soft" data-a="energy" data-v="low">Start gently</button></div>' : "") +
       (raceW !== null && raceW >= 0 ? '<div class="card" style="background:var(--sky-soft);border-color:transparent"><span class="label">Race countdown</span><h3>' + (raceW === 0 ? "Race week. Trust your training." : raceW + " week" + (raceW === 1 ? "" : "s") + " to race day") + "</h3></div>" : "") +
       (doneToday
-        ? coachNote("workout", today() + ":" + d.workouts.filter(w => w.date === today()).length, "Coach Faith on today's workout", (d.workouts.filter(w => w.date === today()).slice(-1)[0] || {}).effort === "hard" ? "that workout was too hard" : "I finished my workout today")
+        ? coachNote("workout", today() + ":" + d.workouts.filter(w => w.date === today()).length, "Coach Faith on today's workout", (d.workouts.filter(w => w.date === today()).slice(-1)[0] || {}).effort === "hard" ? "that workout was too hard, I struggled" : "I did it! I finished, I'm proud")
         : coachNote("daily", today(), "Coach Faith · today", away !== null && away >= 3 ? "I missed workouts and fell off" : plan.goalMet ? "I hit my goal this week" : state.energy === "low" ? "I am tired today" : "what should I do today workout", '<a class="link" href="#/coach" style="padding:0;align-self:flex-start">Talk with Coach Faith</a>')) +
       workoutCard +
       (nextMeal ? '<a class="card" href="#/eat" style="text-decoration:none;color:inherit;flex-direction:row;align-items:center"><span style="flex:1"><span class="label">Next meal</span><br><b>' + esc(nextMeal.recipe.name) + '</b><br><span class="small muted">' + nextMeal.recipe.protein + " g protein · " + nextMeal.recipe.minutes + " min</span></span>" + I.back.replace('d="M12.5 4l-6 6 6 6"', 'd="M7.5 4l6 6-6 6"') + "</a>" : "") +
@@ -376,9 +451,11 @@
     const meals = E.mealsFor(p.setup, daily);
     const slotName = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
     const tags = [(p.setup.diet || "balanced").replace("-", " ")].concat((p.setup.allergies || []).filter(a => a !== "none").map(a => "No " + a));
+    const gk = wellness() && nGoals().showKcal;
     return page('<div class="top">' + flower("#E7DCA2", 32, "right:18px;top:24px") + '<span class="eyebrow">' + esc(E.affirmation("eat")) + '</span><h1 class="title">Today\'s meals</h1><div class="chips">' + tags.map(t => '<span class="chip" style="background:#fff">' + esc(t) + "</span>").join("") + '<button class="chip filter" data-a="editField" data-v="diet" data-back="#/eat">Edit</button></div></div>' +
       '<div class="opts grid" style="grid-template-columns:repeat(2,minmax(0,1fr))"><a class="btn soft small" style="width:100%" href="#/recipes">Browse recipes</a><button class="btn soft small" style="width:100%" data-a="editField" data-v="allergies" data-back="#/eat">Allergies and dislikes</button></div>' +
-      meals.map(m => '<div class="card' + (m.status === "ate" ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><span class="label">' + slotName[m.slot] + "</span>" + (m.status === "ate" ? '<b class="small" style="color:var(--sage)">Eaten</b>' : "") + "</div><h3>" + esc(m.recipe.name) + '</h3><span class="small muted">' + m.recipe.protein + " g protein · " + m.recipe.minutes + ' min</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><a class="btn small" style="width:100%" href="#/recipe/' + m.recipe.id + '">Cook</a>' + (full() ? '<button class="btn small soft" style="width:100%" data-a="swap" data-v="' + m.slot + '"' + (m.options < 2 ? " disabled" : "") + '>Swap</button>' : '<a class="btn small soft" style="width:100%;gap:4px" href="#/plans" aria-label="Swap meals with Core">' + lock + 'Swap</a>') + '<button class="btn small soft" style="width:100%" data-a="ate" data-v="' + m.slot + '" aria-pressed="' + (m.status === "ate") + '">' + (m.status === "ate" ? "Undo" : "Ate it") + "</button></div></div>").join("") +
+      meals.map(m => '<div class="card' + (m.status === "ate" ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><span class="label">' + slotName[m.slot] + "</span>" + (m.status === "ate" ? '<b class="small" style="color:var(--sage)">Eaten</b>' : "") + "</div><h3>" + esc(m.recipe.name) + '</h3><span class="small muted">' + m.recipe.protein + " g protein · " + (gk ? m.recipe.kcal + " cal · " : "") + m.recipe.minutes + ' min</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><a class="btn small" style="width:100%" href="#/recipe/' + m.recipe.id + '">Cook</a>' + (full() ? '<button class="btn small soft" style="width:100%" data-a="swap" data-v="' + m.slot + '"' + (m.options < 2 ? " disabled" : "") + '>Swap</button>' : '<a class="btn small soft" style="width:100%;gap:4px" href="#/plans" aria-label="Swap meals with Core">' + lock + 'Swap</a>') + '<button class="btn small soft" style="width:100%" data-a="ate" data-v="' + m.slot + '" aria-pressed="' + (m.status === "ate") + '">' + (m.status === "ate" ? "Undo" : "Ate it") + "</button></div></div>").join("") +
+      nutritionCard() +
       (full() ? '<a class="btn mint" href="#/grocery">This week\'s grocery list ' + ptag("core") + '</a>' : upsell("Your weekly grocery list", "Get every ingredient for the week in one list, plus meal swaps that fit how you eat.")) + '<button class="btn soft" data-a="ask" data-v="Give me an easy high-protein meal idea for today that fits how I eat">' + I.flower + ' Ask Coach Faith for a meal idea</button>' +
       '<p class="small muted center">Change your diet or allergies anytime in your profile.</p>', "eat");
   }
@@ -387,6 +464,7 @@
     const r = C.RECIPES.find(x => x.id === id);
     if (!r) { go("#/eat"); return ""; }
     return page('<a class="icon-btn" href="#/eat" aria-label="Back to meals" style="background:var(--card)">' + I.back + '</a><span class="eyebrow">' + esc(r.slot) + '</span><h1 class="title">' + esc(r.name) + '</h1><div class="chips"><span class="chip">' + r.protein + ' g protein</span><span class="chip">' + r.minutes + " min</span></div>" +
+      '<div class="card"><span class="label">Nutrition per serving (estimate)</span><div class="macros"><span><b>' + r.kcal + '</b><small>calories</small></span><span><b>' + r.protein + ' g</b><small>protein</small></span><span><b>' + r.carbs + ' g</b><small>carbs</small></span><span><b>' + r.fat + ' g</b><small>fat</small></span><span><b>' + r.fiber + ' g</b><small>fiber</small></span></div></div>' +
       '<div class="card"><span class="label">Ingredients</span><ul class="list small">' + r.ingredients.map(i => "<li>" + esc(i) + "</li>").join("") + "</ul></div>" +
       '<div class="card"><span class="label">Steps</span><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">' + r.steps.map(s => "<li>" + esc(s) + "</li>").join("") + "</ol></div>" +
       '<p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">Give thanks, and enjoy every bite.</p>', "eat");
@@ -460,7 +538,6 @@
     return page('<div class="top" style="padding-bottom:16px">' + flower("#9ED3CF", 28, "right:18px;top:24px") + '<span class="eyebrow">Your coach</span><h1 class="title" style="font-size:24px">Here for you, every step.</h1></div>' + trialBar +
       (state.session ? '<a class="btn soft small" href="#/workout" style="align-self:flex-start">Back to your workout</a>' : "") + '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
       (d.coach.length < 2 ? '<div class="starters">' + (tier() === "trial" ? ["My knees hurt and I only have 15 minutes", "I'm tired today", "What should I eat today?", "How am I doing?", "What's my workout today?"] : ["I'm tired today", "I fell off track", "Swap an exercise", "What should I eat?", "I need encouragement"]).map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
-+
       '<p class="small muted center" style="margin-bottom:70px">Your coach gives fitness encouragement, not medical advice.</p>' +
       (out ? "" : '<form class="composer" data-f="coach"><label for="cm" style="position:absolute;left:-9999px">Message your coach</label><input id="cm" autocomplete="off" placeholder="Message your coach" maxlength="600"><button class="btn small" type="submit">Send</button></form>'), "coach");
   }
@@ -471,7 +548,8 @@
     d.coach.push({ role: "user", content: text, at: Date.now() });
     state.typing = true; render(); scrollChat();
     const plan = E.buildToday(p, d.workouts, {});
-    const context = { name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
+    const nt = wellness() ? nTotals(today()) : null, fsx = wellness() ? fastStatus() : null;
+    const context = { nutrition: nt ? nt.kcal + " cal, " + nt.protein + " g protein, " + nt.carbs + " g carbs, " + nt.fat + " g fat, " + nt.fiber + " g fiber, " + nt.water + " cups water so far today" + (nGoals().kcal ? " (goal " + nGoals().kcal + " cal)" : "") + ", protein goal " + nGoals().protein + " g" : "", fasting: fsx ? fsx.plan + " fasting, " + fsx.text : "", name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
     try {
       if (!hasCoach()) {
         let preview = null;
@@ -480,7 +558,9 @@
         if (r.reply) d.coach.push({ role: "assistant", content: r.reply }); else d.coach.pop();
         state.typing = false; render(); scrollChat(); return;
       }
-      const r = await S.coach(text, context);
+      let r;
+      try { r = await S.coach(text, context); }
+      catch (e) { if (e.status === 403 || e.status === 429) throw e; r = { reply: window.BBF_DEMO_COACH(text, context), offline: true }; }
       d.coach.push({ role: "assistant", content: r.reply });
       if (r.offline && !state.offlineNoted) { state.offlineNoted = true; toast("Connection is weak, so your coach answered from saved encouragement."); }
     } catch (e) {
@@ -586,6 +666,7 @@
     if (route === "recipe") { root.innerHTML = recipeScreen(a); return; }
     if (route === "edit") { root.innerHTML = editScreen(a); return; }
     if (route === "recipes") { root.innerHTML = recipesScreen(); return; }
+    if (route === "nutrition") { root.innerHTML = nutritionScreen(); return; }
     root.innerHTML = (screens[route] || todayScreen)();
     if (route === "coach") { scrollChat(); if (state.ask) { const q = state.ask; state.ask = null; sendCoach(q); } }
   }
@@ -688,6 +769,10 @@
     },
     async toggleWeight() { const st = Object.assign({}, state.data.profile.settings); st.hideWeight = !st.hideWeight; await quick(d => { d.profile.settings = st; }, () => S.saveProfile({ settings: st }), st.hideWeight ? "Body weight hidden." : "Body weight showing."); },
     async stepGoal(el) { const st = Object.assign({}, state.data.profile.settings, { stepGoal: +el.dataset.v }); await quick(d => { d.profile.settings = st; }, () => S.saveProfile({ settings: st }), "Step goal set to " + (+el.dataset.v).toLocaleString() + "."); },
+    async water(el) { const n = +el.dataset.v; await saveX(x => { x.water = Math.max(0, Math.min(30, (x.water || 0) + n)); }, n > 0 ? "Cup of water added." : null); },
+    foodToggle() { state.foodOpen = !state.foodOpen; render(); },
+    async delFood(el) { const i = +el.dataset.v; await saveX(x => { x.foods = (x.foods || []).filter((_, j) => j !== i); }, "Food removed."); },
+    async fastDone() { await saveX(x => { x.fast = true; }, "Fast complete. Your discipline is inspiring!"); },
     recipeFilter(el) { state.recipeSlot = el.dataset.v; render(); },
     editField(el) { state.setup = JSON.parse(JSON.stringify(state.data.profile.setup)); state.editBack = el.dataset.back || "#/profile"; go("#/edit/" + el.dataset.v); },
     async saveEdit() {
@@ -754,6 +839,22 @@
       await quick(d => { d.body = d.body.filter(b => b.date !== t).concat({ date: t, weight: w }).sort((a, b) => a.date.localeCompare(b.date)); }, () => S.addBody(t, w), "Weigh-in saved: " + w + " lb.");
     },
     async coach() { const v = val("cm"); document.getElementById("cm").value = ""; await sendCoach(v); },
+    async food() {
+      const n = val("fn").slice(0, 60), num = id => Math.max(0, Math.min(5000, Math.round(parseFloat(val(id)) || 0)));
+      if (!n) return toast("Add the food's name.");
+      const f = { n, kcal: num("fk"), p: num("fp"), c: num("fc"), f: num("ff") };
+      state.foodOpen = false;
+      await saveX(x => { x.foods = (x.foods || []).concat(f).slice(-30); }, n + " added.");
+    },
+    async ngoals() {
+      const k = parseInt(val("gk"), 10), p = parseInt(val("gp"), 10);
+      if (k && (k < 1200 || k > 4000)) return toast("Choose a calorie goal between 1,200 and 4,000.");
+      const nutrition = { kcal: k || null, protein: Math.max(40, Math.min(250, p || 100)), water: +val("gw") || 8, showKcal: document.getElementById("gs").checked };
+      const fasting = { plan: val("fpn") || "none", start: val("fst") || "12:00" };
+      const st = Object.assign({}, state.data.profile.settings, { nutrition, fasting });
+      go("#/eat");
+      await quick(d => { d.profile.settings = st; }, () => S.saveProfile({ settings: st }), "Goals saved.");
+    },
     async name() { const n = val("pn").slice(0, 40); if (!n) return toast("Add your first name."); await quick(d => { d.profile.name = n; }, () => S.saveProfile({ name: n }), "Name saved."); }
   };
   const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };

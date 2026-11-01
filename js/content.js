@@ -176,10 +176,51 @@
     R("turkeyroll", "Turkey and cheese roll-ups", "snack", 18, 3, ["balanced", "high-protein", "gluten-free"], ["dairy"], ["3 slices turkey", "2 slices cheese", "Cucumber spears"], ["Lay cheese on turkey.", "Roll around cucumber spears."]),
     R("applepb", "Apple with peanut butter", "snack", 8, 2, ["balanced", "vegetarian", "vegan", "gluten-free", "dairy-free"], ["nuts"], ["1 apple", "2 tbsp peanut butter"], ["Slice the apple and dip."]),
     R("proteinshake", "Chocolate protein shake", "snack", 25, 2, ["balanced", "high-protein", "vegetarian", "gluten-free"], ["dairy"], ["1 scoop protein powder", "1 cup milk", "Ice", "1/2 banana (optional)"], ["Blend or shake until smooth."]),
+    // ---- low-carb and pescatarian favorites ----
+    R("caesarsalad", "Chicken Caesar-style salad", "lunch", 38, 15, [...ALL, "gluten-free"], ["dairy"], ["5 oz grilled chicken", "Chopped romaine", "2 tbsp Greek yogurt Caesar dressing", "2 tbsp shaved parmesan", "Lemon"], ["Slice the chicken.", "Toss romaine with dressing and lemon.", "Top with chicken and parmesan."]),
+    R("chickensaladcups", "Chicken salad cucumber cups", "lunch", 30, 10, [...ALL, "gluten-free"], ["dairy"], ["5 oz cooked chicken, diced", "2 tbsp Greek yogurt", "Celery and grapes, diced", "1 cucumber, thick slices"], ["Mix chicken, yogurt, celery and grapes.", "Scoop onto cucumber slices."]),
+    R("tunabeansalad", "Tuna and white bean salad", "lunch", 32, 10, [...ALL, "gluten-free", "dairy-free"], ["fish"], ["1 can tuna", "1/2 can white beans", "Red onion and parsley", "Olive oil and lemon", "Greens"], ["Mix tuna, beans, onion and parsley.", "Dress with oil and lemon.", "Serve over greens."]),
+    R("avocadoeggs", "Avocado and eggs plate", "breakfast", 14, 10, ["balanced", "mediterranean", "vegetarian", "gluten-free", "dairy-free"], ["egg"], ["2 eggs", "1/2 avocado", "Sliced tomato", "Salt, pepper and chili flakes"], ["Cook eggs the way you like.", "Slice avocado and tomato.", "Season and serve together."]),
+    R("salmonasparagus", "Garlic salmon and asparagus", "dinner", 36, 20, [...ALL, "gluten-free", "dairy-free"], ["fish"], ["6 oz salmon fillet", "1 bunch asparagus", "1 tbsp olive oil", "Garlic and lemon"], ["Heat oven to 425°F.", "Toss asparagus with oil and garlic.", "Add salmon, season with lemon.", "Roast 12 to 15 minutes."]),
+    R("steakbroccoli", "Sirloin with roasted broccoli", "dinner", 40, 25, ["balanced", "high-protein", "gluten-free", "dairy-free"], [], ["6 oz sirloin steak", "3 cups broccoli", "1 tbsp olive oil", "Garlic, salt and pepper"], ["Roast broccoli in oil at 425°F for 18 minutes.", "Season steak and sear 4 minutes per side.", "Rest 5 minutes, slice and serve."]),
+    R("shrimpcaulirice", "Shrimp cauliflower fried rice", "dinner", 30, 20, ["balanced", "high-protein", "gluten-free", "dairy-free"], ["fish", "egg", "soy"], ["6 oz shrimp", "2 cups riced cauliflower", "1 egg", "Peas, carrots and green onion", "1 tbsp tamari"], ["Cook shrimp 3 minutes and set aside.", "Stir-fry cauliflower and vegetables 5 minutes.", "Scramble in the egg.", "Add shrimp and tamari."]),
+    R("eggrollbowl", "Egg roll in a bowl", "dinner", 30, 20, ["balanced", "high-protein", "dairy-free"], ["soy", "gluten"], ["1/2 lb ground turkey", "3 cups shredded cabbage and carrots", "2 tbsp soy sauce", "Ginger, garlic and green onion", "1 tsp sesame oil"], ["Brown turkey 7 minutes.", "Add cabbage mix, ginger and garlic.", "Cook 5 minutes until tender.", "Stir in soy sauce and sesame oil."]),
+    R("tofuzoodles", "Tofu zucchini noodle stir-fry", "dinner", 22, 20, ["balanced", "vegetarian", "vegan", "gluten-free", "dairy-free"], ["soy"], ["1/2 block firm tofu, cubed", "2 zucchini, spiralized", "Bell pepper strips", "1 tbsp tamari", "1 tsp sesame oil"], ["Pan-fry tofu until golden.", "Add pepper and zucchini noodles, cook 3 minutes.", "Toss with tamari and sesame oil."]),
+    R("shrimpskewers", "Shrimp and veggie skewers", "dinner", 28, 20, [...ALL, "gluten-free", "dairy-free"], ["fish"], ["6 oz shrimp", "Zucchini, peppers and red onion", "1 tbsp olive oil", "Lemon and paprika"], ["Thread shrimp and vegetables on skewers.", "Brush with oil and spices.", "Grill or broil 3 to 4 minutes per side."]),
+    R("celeryab", "Celery with almond butter", "snack", 6, 2, ["balanced", "mediterranean", "vegetarian", "vegan", "gluten-free", "dairy-free"], ["nuts"], ["3 celery stalks", "2 tbsp almond butter"], ["Fill celery with almond butter."]),
     R("appleegg", "Apple and hard-boiled eggs", "snack", 13, 2, [...ALL, "vegetarian", "gluten-free", "dairy-free"], ["egg"], ["2 hard-boiled eggs", "1 apple"], ["Slice the apple and enjoy with the eggs."])
   ];
 
-  const DIETS = ["balanced", "high-protein", "mediterranean", "vegetarian", "vegan", "dairy-free", "gluten-free"];
+  const DIETS = ["balanced", "high-protein", "mediterranean", "low-carb", "pescatarian", "vegetarian", "vegan", "dairy-free", "gluten-free"];
+
+  // Nutrition per serving (estimates): calories, carbs, fat, fiber. Protein is set on each recipe.
+  const NUTRITION = {
+    eggspin: [340, 4, 24, 2], yogurtbowl: [300, 35, 8, 5], oatsprotein: [390, 55, 11, 10], tofuscramble: [240, 8, 15, 3],
+    chickenbowl: [450, 30, 10, 3], tunawrap: [230, 4, 12, 2], lentilsoup: [230, 38, 2, 15], turkeywrap: [340, 32, 10, 6],
+    chickpeasalad: [420, 50, 16, 13], tacowraps: [340, 8, 18, 4], salmonveg: [520, 30, 28, 7], chickenstirfry: [470, 40, 8, 5],
+    beanchili: [330, 55, 3, 18], pastaturkey: [520, 62, 12, 9], shrimpbowl: [360, 25, 10, 4], chiapudding: [320, 38, 15, 15],
+    hummusveg: [180, 18, 10, 6], cottagebowl: [220, 14, 5, 1], edamame: [190, 14, 8, 8], veggieomelet: [375, 7, 28, 2],
+    pbtoast: [515, 66, 18, 10], smoothie: [350, 45, 9, 7], veganoats: [435, 50, 18, 12], breakfasttacos: [495, 45, 21, 12],
+    sweetpotatohash: [330, 30, 13, 5], cottagetoast: [330, 42, 6, 6], quinoabowl: [450, 72, 10, 17], eggsaladwrap: [320, 4, 20, 1],
+    salmonsalad: [290, 8, 16, 3], tofubowl: [400, 50, 12, 6], chickensoup: [260, 12, 6, 3], caprese: [500, 10, 28, 2],
+    hummusbowl: [390, 50, 15, 13], lentilcurry: [380, 48, 12, 16], tofustirfry: [360, 35, 14, 7], stuffedpeppers: [340, 60, 3, 16],
+    chickpeacurry: [300, 45, 7, 13], lemonchicken: [530, 40, 14, 8], turkeymeatballs: [400, 20, 18, 5], codtacos: [380, 42, 6, 6],
+    beefbowl: [410, 32, 13, 3], pestopasta: [600, 75, 22, 13], tempehbowl: [450, 45, 20, 10], trailmix: [175, 12, 13, 3],
+    roastedchickpeas: [160, 22, 5, 6], yogurtparfait: [200, 25, 4, 3], turkeyroll: [250, 4, 14, 1], applepb: [285, 32, 16, 6],
+    proteinshake: [290, 25, 6, 2], appleegg: [240, 26, 10, 4], caesarsalad: [420, 10, 22, 4], chickensaladcups: [300, 10, 14, 2],
+    tunabeansalad: [420, 30, 16, 9], avocadoeggs: [300, 9, 23, 7], salmonasparagus: [450, 10, 26, 5], steakbroccoli: [430, 12, 20, 5],
+    shrimpcaulirice: [330, 14, 14, 5], eggrollbowl: [340, 12, 16, 4], tofuzoodles: [300, 14, 17, 5], shrimpskewers: [300, 14, 12, 4],
+    celeryab: [200, 8, 16, 4]
+  };
+  const MEAT = /chicken|turkey|beef|steak|sirloin|sausage/i;
+  RECIPES.forEach(r => {
+    const n = NUTRITION[r.id] || [Math.round(r.protein * 12), 20, 10, 3];
+    r.kcal = n[0]; r.carbs = n[1]; r.fat = n[2]; r.fiber = n[3];
+    // Extra diet styles worked out from each recipe
+    if (r.carbs <= 15) r.tags.push("low-carb");
+    if (r.tags.includes("vegetarian") || (r.allergens.includes("fish") && !MEAT.test(r.ingredients.join(" ")))) r.tags.push("pescatarian");
+  });
+
   const ALLERGENS = ["dairy", "gluten", "nuts", "egg", "fish", "soy"];
 
   window.BBF_CONTENT = { VERSES, AFFIRMATIONS, PROGRAMS, EXERCISES, RUNS, RECIPES, DIETS, ALLERGENS };

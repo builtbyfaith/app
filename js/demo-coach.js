@@ -126,6 +126,18 @@
       "You're getting stronger{name}! Slow each rep down for three seconds on the way down; it makes any exercise more challenging without adding weight.",
       "Time to level up{name}. Add a rep to every set, or try the next heavier dumbbells. Keep your form crisp."
     ] },
+    { id: "fasting", words: ["fast", "fasting", "intermittent", "eating window", "16:8", "14:10", "18:6", "12:12", "skip breakfast"], replies: [
+      "Intermittent fasting can help some people with structure{name}. A gentle start is 12:12, then 14:10 if it feels good. Drink water while fasting and open your eating window with protein. Check with your doctor first if you're pregnant, have diabetes, take blood sugar or GLP-1 medicine, or have a history of disordered eating.",
+      "Fasting works best when it feels flexible, not punishing{name}. If you train in the morning, try placing your eating window so you can eat soon after your workout. If you feel shaky or dizzy, eat something and ease up. If you have a health condition or take medication, check with your doctor first.",
+      "During a fast, water, black coffee and plain tea are fine{name}. When your window opens, start with protein and vegetables, and don't try to make up for the hours you fasted. Steady and kind beats extreme. If you have a health condition or take medication, check with your doctor first.",
+      "There's no prize for the longest fast{name}. Most people do well with 12 to 16 hours. Your strength, sleep and mood are the best signs of whether it's working for you. If you have a health condition or take medication, check with your doctor first."
+    ] },
+    { id: "calories", words: ["calorie", "calories", "macro", "macros", "carbs", "how much should i eat", "intake", "track food", "tracking food"], replies: [
+      "Calories can be a helpful guide, not a judge{name}. Focus first on protein at every meal, plenty of vegetables and fiber, and enough water. Those habits do a lot of the work for you.",
+      "Eating too little can backfire{name}: low energy, poor workouts and muscle loss. If you track calories, never go below about 1,200 a day, and let your strength and energy tell you if it's enough.",
+      "Carbs fuel your workouts{name}. Oats, fruit, potatoes, rice and whole grains are great choices, especially before training. Balance them with protein and healthy fats.",
+      "A simple plate guide{name}: half vegetables, a palm or two of protein, a fist of carbs and a thumb of healthy fat. It works without counting anything."
+    ] },
     { id: "protein", words: ["calcium", "bone", "vitamin", "supplement", "creatine", "fiber", "carb", "protein", "eat", "food", "meal", "recipe", "breakfast", "lunch", "dinner", "diet", "nutrition", "grocery"], replies: [
       "Aim for a protein-rich food at every meal{name}: eggs, Greek yogurt, chicken, fish, beans or tofu. Your Eat tab already lines that up for you, and Swap gives you another option that fits.",
       "Simple wins best{name}: protein, a vegetable or fruit, and something filling at each meal. Use the grocery list in the Eat tab so the week is easier.",
