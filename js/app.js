@@ -9,9 +9,10 @@
   const today = () => E.dateStr();
   const go = h => { if (location.hash === h) render(); else location.hash = h; };
   const firstName = () => ((state.data && state.data.profile && state.data.profile.name) || "").split(" ")[0];
-  function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+  function toast(msg) { document.querySelectorAll(".toast").forEach(x => x.remove()); const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
   const flower = (c, size, style) => '<svg class="fl" style="width:' + size + 'px;' + style + '" viewBox="0 0 100 100" aria-hidden="true"><g fill="' + c + '"><ellipse cx="50" cy="24" rx="14" ry="22"/><ellipse cx="50" cy="24" rx="14" ry="22" transform="rotate(72 50 50)"/><ellipse cx="50" cy="24" rx="14" ry="22" transform="rotate(144 50 50)"/><ellipse cx="50" cy="24" rx="14" ry="22" transform="rotate(216 50 50)"/><ellipse cx="50" cy="24" rx="14" ry="22" transform="rotate(288 50 50)"/></g><circle cx="50" cy="50" r="11" fill="#E7DCA2"/></svg>';
   const I = {
+    flower: '<svg width="18" height="18" viewBox="4 0 92 92" aria-hidden="true"><g fill="#E9765F"><ellipse cx="50" cy="20" rx="13" ry="19"/><ellipse cx="50" cy="20" rx="13" ry="19" transform="rotate(72 50 46)"/><ellipse cx="50" cy="20" rx="13" ry="19" transform="rotate(144 50 46)"/><ellipse cx="50" cy="20" rx="13" ry="19" transform="rotate(216 50 46)"/><ellipse cx="50" cy="20" rx="13" ry="19" transform="rotate(288 50 46)"/></g><circle cx="50" cy="46" r="10" fill="#E7DCA2"/></svg>',
     check: '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5l4 4 8-9"/></svg>',
     back: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4l-6 6 6 6"/></svg>',
     user: '<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="8" r="3.5"/><path d="M4 19c1-3.5 3.8-5 7-5s6 1.5 7 5"/></svg>',
@@ -29,7 +30,7 @@
   async function reload() { state.data = await S.load(); }
   // ---- memberships ----
   // Edit prices and the "what's included" lists here. Stripe prices must match.
-  const TRIAL_DAYS = 3, TRIAL_MSGS = 30, FREE_WORKOUTS = 2, FREE_MSGS_DAY = 5;
+  const TRIAL_DAYS = 3, FREE_WORKOUTS = 2;
   const PLAN_INFO = {
     free: { name: "Free", price: "$0", per: "forever", items: [
       "Your personal plan from the quiz, for any program",
@@ -38,17 +39,17 @@
       "Today's meal ideas and recipes",
       "Step tracking, weigh-ins and workout history",
       "Daily verse and encouragement",
-      "Coach Faith saved replies, " + FREE_MSGS_DAY + " a day"] },
+      "Coach Faith everyday encouragement: 120 saved replies across 38 topics"] },
     core: { name: "Core", price: "$4.99", per: "/month", items: [
       "Everything in Free",
       "Your full weekly schedule, every workout day",
       "Workouts that add weight and reps as you get stronger",
       "Meal swaps and your weekly grocery list",
       "Strength charts for every lift",
-      "Unlimited Coach Faith saved replies"] },
+      "Coach Faith full library: 450+ saved replies with tips on form, meals, sleep, running and more, even offline"] },
     coach: { name: "AI Coach", price: "$9.99", per: "/month", items: [
       "Everything in Core",
-      "Coach Faith AI: real answers about your plan, up to 100 messages a day",
+      "Coach Faith AI: real, personal answers about your plan",
       "Help with swaps, tired days, meals and motivation, any time"] }
   };
   const isPaid = () => ["core", "coach"].includes(state.data.plan);
@@ -62,15 +63,53 @@
   // coach | core | trial | free
   function tier() { if (hasCoach()) return "coach"; if (isPaid()) return "core"; return trial().active ? "trial" : "free"; }
   const full = () => tier() !== "free";
-  // Saved-reply coach allowance for members without the AI coach
-  function savedAllowance() {
-    const t = tier(), msgs = (state.data.coach || []).filter(m => m.role === "user");
-    const at = m => m.at || trial().start;
-    if (t === "trial") return { limit: TRIAL_MSGS, since: trial().start, left: Math.max(0, TRIAL_MSGS - msgs.filter(m => at(m) >= trial().start).length), label: "Free trial" };
-    if (t === "free") return { limit: FREE_MSGS_DAY, since: dayStart(), left: Math.max(0, FREE_MSGS_DAY - msgs.filter(m => at(m) >= dayStart()).length), label: "Today" };
-    return { limit: 100000, since: 0, left: null, label: "" };
-  }
+  const cardForTrial = () => !!(window.BBF_CONFIG && window.BBF_CONFIG.cardForTrial);
+  const fmtDay = ms => new Date(ms).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const trialEndText = () => fmtDay(trial().start + TRIAL_DAYS * 86400000);
+  // During the trial, small tags show which plan keeps each feature
+  const ptag = k => tier() === "trial" ? '<span class="ptag ptag-' + k + '">' + (k === "coach" ? "AI Coach" : "Core") + "</span>" : "";
+  // Members without the AI coach get saved replies: the starter set on Free, the full library otherwise.
+  const basicCoach = () => tier() === "free";
   const hasAccess = () => true;
+
+  // ---- Coach Faith across the app ----
+  // AI Coach members get notes written from their real data; everyone else gets a fitting saved note.
+  const notes = {};
+  function coachCtx() {
+    const d = state.data, p = d.profile, plan = E.buildToday(p, d.workouts, {});
+    return { name: p.name, today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target };
+  }
+  function savedNote(id, prompt) {
+    if (!notes[id]) notes[id] = window.BBF_DEMO_COACH ? window.BBF_DEMO_COACH(prompt, coachCtx(), { basic: tier() === "free" }) : "";
+    return notes[id];
+  }
+  function noteCard(title, id, body, extra) {
+    return '<div class="card coach-note"><div class="cn-head"><span class="cn-av" aria-hidden="true">' + I.flower + '</span><span class="label">' + title + '</span></div><p class="cn-text" id="' + id + '">' + body + "</p>" + (extra || "") + "</div>";
+  }
+  // Shows a saved note right away; for AI Coach members swaps in the personal note when it arrives.
+  function coachNote(kind, key, title, prompt, extra) {
+    const id = "cn-" + kind + "-" + key.replace(/[^\w-]/g, "");
+    if (tier() === "trial" && window.BBF_PREVIEW) {
+      let text = ""; try { text = window.BBF_PREVIEW[kind](state.data); } catch (e) {}
+      return noteCard(title + " " + ptag("coach"), id, esc(text || savedNote(id, prompt)), extra);
+    }
+    if (!hasCoach()) return noteCard(title, id, esc(savedNote(id, prompt)), extra);
+    const ck = "bbf_note_" + id;
+    let cached = notes[ck]; try { cached = cached || localStorage.getItem(ck); } catch (e) {}
+    if (cached) return noteCard(title, id, esc(cached), extra);
+    setTimeout(async () => {
+      try {
+        const r = await S.insight(kind, key.split(":")[0], key.includes(":") && !key.endsWith(":1"));
+        const text = r && r.text;
+        const el = document.getElementById(id);
+        const out = text || savedNote(id, prompt);
+        if (text) { notes[ck] = text; try { localStorage.setItem(ck, text); } catch (e) {} }
+        if (el) el.textContent = out;
+      } catch (e) { const el = document.getElementById(id); if (el) el.textContent = savedNote(id, prompt); }
+    }, 0);
+    return noteCard(title, id, '<span class="muted">Coach Faith is writing your note…</span>', extra);
+  }
+
   const lock = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg>';
   const upsell = (title, text) => '<div class="card upsell"><span class="label" style="display:flex;align-items:center;gap:6px;color:var(--coral)">' + lock + ' Core feature</span><h3>' + title + '</h3><p class="small">' + text + '</p><a class="btn" href="#/plans">See plans from ' + PLAN_INFO.core.price + '/month</a></div>';
   let memPending = null;
@@ -80,6 +119,25 @@
   function clearPending() { memPending = null; try { localStorage.removeItem(PKEY); } catch (e) {} }
   const blankSetup = () => ({ programs: [], place: [], injuries: [], allergies: [] });
   const bloom = (n, total) => { const cols = ["#E9765F", "#8FCDC6", "#E7D58E", "#F3B4A7", "#8FCDC6", "#E9765F", "#E7D58E", "#F3B4A7", "#8FCDC6"]; let s = '<svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true">'; for (let k = 0; k < total; k++) { if (k < n) s += '<ellipse cx="50" cy="22" rx="12" ry="20" fill="' + cols[k % cols.length] + '" transform="rotate(' + (k * 360 / total) + ' 50 50)"/>'; } return s + '<circle cx="50" cy="50" r="11" fill="#E7DCA2"/></svg>'; };
+  // Friendly wording for save errors (the technical detail goes to the browser console)
+  function friendly(e) {
+    const m = String((e && e.message) || e || "");
+    console.error("save error:", m);
+    if (/fetch|network|offline|load failed/i.test(m)) return "You seem to be offline. Please check your connection and try again.";
+    if (/jwt|session|sign in|auth/i.test(m)) return "Please sign in again to save that.";
+    if (/schema cache|does not exist|column|relation/i.test(m)) return "We couldn't save that yet. The app is finishing setup, so please try again soon.";
+    if (/violates check|constraint/i.test(m)) return "That number looks off. Please check it and try again.";
+    return "We couldn't save that. Please try again.";
+  }
+  // Update the screen right away, save in the background, and undo if the save fails.
+  async function quick(local, remote, msg) {
+    const backup = JSON.stringify(state.data);
+    try { local(state.data); } catch (e) {}
+    render();
+    if (msg) toast(msg);
+    try { await remote(); }
+    catch (e) { state.data = JSON.parse(backup); render(); toast(friendly(e)); }
+  }
   async function act(fn) { if (state.busy) return; state.busy = true; try { await fn(); } catch (e) { toast(e.message || "Something went wrong. Please try again."); } finally { state.busy = false; } }
 
   // ---------- auth screens ----------
@@ -173,16 +231,20 @@
     const t = tier(), tr = trial();
     const head = t === "trial"
       ? '<span class="eyebrow">Free trial · ' + tr.daysLeft + (tr.daysLeft === 1 ? " day" : " days") + ' left</span><h1 class="title">Choose what fits you</h1><p class="sub">You\'re trying everything right now. After your trial you keep the Free plan, or pick Core or AI Coach any time.</p>'
-      : t === "free" ? '<span class="eyebrow">Your plan: Free</span><h1 class="title">Grow a little stronger</h1><p class="sub">Your Free plan stays free. Upgrade any time for your full schedule, meals and more.</p>'
-      : '<span class="eyebrow">Your membership</span><h1 class="title">Your plan</h1><p class="sub">Switch plans or manage billing any time.</p>';
+      : t === "free" ? '<span class="eyebrow">Your free trial has ended</span><h1 class="title">Keep growing stronger</h1><p class="sub">You\'re on the Free plan now, and it stays free. Choose Core or AI Coach any time to keep your full schedule, meals and coach.</p>'
+      : '<span class="eyebrow">Your membership</span><h1 class="title">Your plan</h1><p class="sub">' + (state.data.status === "trialing" && state.data.periodEnd ? "Free until " + fmtDay(state.data.periodEnd) + ", then billing starts. " : "") + 'Switch plans or manage billing any time.</p>';
     const ck = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5l4 4 8-9"/></svg>';
     const card = (k, hl, btn) => { const i = PLAN_INFO[k], cur = (t === k) || (k === "free" && t === "free");
+      if (t === "trial" && !cardForTrial()) btn = "";
       return '<div class="card plan' + (hl ? " hl" : "") + '">' + (hl ? '<span class="label" style="color:var(--coral)">Most encouraging</span>' : "") +
         '<div class="ex"><h3>' + i.name + '</h3>' + (cur ? '<span class="chip">Your plan</span>' : "") + '</div><p class="plan-price">' + i.price + '<span> ' + i.per + '</span></p>' +
         '<ul class="plan-list">' + i.items.map(x => "<li>" + ck + "<span>" + esc(x) + "</span></li>").join("") + "</ul>" + (cur ? "" : btn) + "</div>"; };
     return page('<div class="top">' + flower("#F0A99C", 34, "right:18px;top:24px") + head + '</div>' +
-      card("coach", true, '<button class="btn" data-a="checkout" data-v="coach">Choose AI Coach</button>') +
-      card("core", false, '<button class="btn soft" data-a="checkout" data-v="core">Choose Core</button>') +
+      (t === "trial" ? (cardForTrial()
+        ? '<div class="note"><b>Choose now, pay later.</b> You won\'t be charged until your free trial ends on ' + trialEndText() + '. AI Coach switches on right away.</div>'
+        : '<div class="note"><b>No card needed during your trial.</b> Enjoy everything until ' + trialEndText() + '. Then pick the plan that fits you, or keep using Free.</div>') : "") +
+      card("coach", true, '<button class="btn" data-a="checkout" data-v="coach">Choose AI Coach</button>' + (t === "trial" ? '<p class="small muted center">Free until ' + trialEndText() + ', then ' + PLAN_INFO.coach.price + '/month</p>' : "")) +
+      card("core", false, '<button class="btn soft" data-a="checkout" data-v="core">Choose Core</button>' + (t === "trial" ? '<p class="small muted center">Free until ' + trialEndText() + ', then ' + PLAN_INFO.core.price + '/month</p>' : "")) +
       card("free", false, "") +
       (isPaid() ? '<button class="btn soft" data-a="portal">Manage or cancel</button>' : '<p class="small muted center">Cancel any time from your profile. No card needed for Free.</p>') +
       '<a class="btn mint" href="#/today">Back to today</a>' +
@@ -208,7 +270,7 @@
     let workoutCard;
     const capped = !full() && plan.doneWeek >= FREE_WORKOUTS;
     if (capped && !doneToday) {
-      workoutCard = '<div class="card" style="background:var(--butter-soft);border-color:transparent"><span class="label">This week</span><h3>You did your ' + FREE_WORKOUTS + ' free workouts. Well done!</h3><p class="small">Take a walk or stretch today. Your next free workouts open on Monday, or unlock your full weekly schedule with Core.</p><a class="btn" href="#/plans">See plans from ' + PLAN_INFO.core.price + '/month</a><button class="btn soft" data-a="stepsOpen">Log a walk</button></div>';
+      workoutCard = '<div class="card" style="background:var(--butter-soft);border-color:transparent"><span class="label">This week</span><h3>You did your ' + FREE_WORKOUTS + ' free workouts. Well done!</h3><p class="small">Take a walk or stretch today. Your next free workouts open on Monday, or unlock your full weekly schedule with Core.</p><a class="btn" href="#/plans">See plans from ' + PLAN_INFO.core.price + '/month</a><button class="btn soft" data-a="stepsToggle">Log a walk</button></div>';
     } else if (doneToday) {
       workoutCard = '<div class="card" style="background:var(--mint-soft);border-color:transparent"><span class="label">Today</span><h3>Workout done. Well done' + (firstName() ? ", " + esc(firstName()) : "") + '.</h3><p class="small">' + esc(E.affirmation("done")) + '</p><a class="btn soft" href="#/progress">See your progress</a></div>';
     } else {
@@ -230,6 +292,9 @@
       "</div>" +
       (away !== null && away >= 5 && !doneToday && !capped ? '<div class="card" style="background:var(--butter-soft);border-color:transparent"><h3>' + esc(E.affirmation("back")) + '</h3><p class="small">It\'s been ' + away + ' days. Let\'s ease back in with a gentle session.</p><button class="btn soft" data-a="energy" data-v="low">Start gently</button></div>' : "") +
       (raceW !== null && raceW >= 0 ? '<div class="card" style="background:var(--sky-soft);border-color:transparent"><span class="label">Race countdown</span><h3>' + (raceW === 0 ? "Race week. Trust your training." : raceW + " week" + (raceW === 1 ? "" : "s") + " to race day") + "</h3></div>" : "") +
+      (doneToday
+        ? coachNote("workout", today() + ":" + d.workouts.filter(w => w.date === today()).length, "Coach Faith on today's workout", (d.workouts.filter(w => w.date === today()).slice(-1)[0] || {}).effort === "hard" ? "that workout was too hard" : "I finished my workout today")
+        : coachNote("daily", today(), "Coach Faith · today", away !== null && away >= 3 ? "I missed workouts and fell off" : plan.goalMet ? "I hit my goal this week" : state.energy === "low" ? "I am tired today" : "what should I do today workout", '<a class="link" href="#/coach" style="padding:0;align-self:flex-start">Talk with Coach Faith</a>')) +
       workoutCard +
       (nextMeal ? '<a class="card" href="#/eat" style="text-decoration:none;color:inherit;flex-direction:row;align-items:center"><span style="flex:1"><span class="label">Next meal</span><br><b>' + esc(nextMeal.recipe.name) + '</b><br><span class="small muted">' + nextMeal.recipe.protein + " g protein · " + nextMeal.recipe.minutes + " min</span></span>" + I.back.replace('d="M12.5 4l-6 6 6 6"', 'd="M7.5 4l6 6-6 6"') + "</a>" : "") +
       '<p class="small muted center">' + esc(C.PROGRAMS[E.mainProgram(p.setup)].tip) + "</p>", "today");
@@ -260,7 +325,7 @@
             x.kind === "time" ? '<span class="small" style="grid-column:span 2">' + x.secs + " seconds</span>" :
               '<label style="position:absolute;left:-9999px" for="r' + i + "_" + j + '">Reps</label><input id="r' + i + "_" + j + '" type="number" inputmode="numeric" data-in="reps" data-i="' + i + '" value="' + x.repsUsed + '" aria-label="Reps"><span class="small muted">reps</span>') +
           '<button class="check' + (on ? " on" : "") + '" data-a="setDone" data-v="' + i + "," + j + '" aria-pressed="' + on + '" aria-label="Set ' + (j + 1) + ' done">' + I.check + "</button></div>").join("");
-        return '<div class="card' + (doneCount === x.sets ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><h3 style="font-size:18px">' + esc(x.name) + '</h3><span class="small muted">' + doneCount + "/" + x.sets + '</span></div>' + (window.BBF_FIGURE ? window.BBF_FIGURE(x.name) : "") + '<p class="small muted">' + esc(x.cue) + "</p>" + rows + "</div>";
+        return '<div class="card' + (doneCount === x.sets ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><h3 style="font-size:18px">' + esc(x.name) + '</h3><span class="small muted">' + doneCount + "/" + x.sets + '</span></div>' + (window.BBF_FIGURE ? window.BBF_FIGURE(x.name) : "") + '<p class="small muted">' + esc(x.cue) + "</p>" + rows + '<button class="link ask" data-a="ask" data-v="' + esc("How do I do " + x.name + " with good form" + (((state.data.profile.setup || {}).injuries || []).filter(i => i !== "none").length ? ", and is it okay for my " + state.data.profile.setup.injuries.filter(i => i !== "none").join(" and ") : "") + "?") + '">' + I.flower + ' Ask Coach Faith about this</button></div>';
       }).join("");
     }
     const timer = state.timer ? '<div class="timer" role="timer" aria-live="off"><span>Rest</span><b id="tleft">' + state.timer.left + 's</b><button data-a="skipRest">Skip</button></div>' : "";
@@ -310,10 +375,12 @@
     const p = state.data.profile, daily = state.data.daily[today()] || {};
     const meals = E.mealsFor(p.setup, daily);
     const slotName = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
-    const tags = [p.setup.diet].concat((p.setup.allergies || []).filter(a => a !== "none").map(a => "No " + a));
-    return page('<div class="top">' + flower("#E7DCA2", 32, "right:18px;top:24px") + '<span class="eyebrow">' + esc(E.affirmation("eat")) + '</span><h1 class="title">Today\'s meals</h1><div class="chips">' + tags.map(t => '<span class="chip" style="background:#fff">' + esc(t) + "</span>").join("") + "</div></div>" +
+    const tags = [(p.setup.diet || "balanced").replace("-", " ")].concat((p.setup.allergies || []).filter(a => a !== "none").map(a => "No " + a));
+    return page('<div class="top">' + flower("#E7DCA2", 32, "right:18px;top:24px") + '<span class="eyebrow">' + esc(E.affirmation("eat")) + '</span><h1 class="title">Today\'s meals</h1><div class="chips">' + tags.map(t => '<span class="chip" style="background:#fff">' + esc(t) + "</span>").join("") + '<button class="chip filter" data-a="editField" data-v="diet" data-back="#/eat">Edit</button></div></div>' +
+      '<div class="opts grid" style="grid-template-columns:repeat(2,minmax(0,1fr))"><a class="btn soft small" style="width:100%" href="#/recipes">Browse recipes</a><button class="btn soft small" style="width:100%" data-a="editField" data-v="allergies" data-back="#/eat">Allergies and dislikes</button></div>' +
       meals.map(m => '<div class="card' + (m.status === "ate" ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><span class="label">' + slotName[m.slot] + "</span>" + (m.status === "ate" ? '<b class="small" style="color:var(--sage)">Eaten</b>' : "") + "</div><h3>" + esc(m.recipe.name) + '</h3><span class="small muted">' + m.recipe.protein + " g protein · " + m.recipe.minutes + ' min</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><a class="btn small" style="width:100%" href="#/recipe/' + m.recipe.id + '">Cook</a>' + (full() ? '<button class="btn small soft" style="width:100%" data-a="swap" data-v="' + m.slot + '"' + (m.options < 2 ? " disabled" : "") + '>Swap</button>' : '<a class="btn small soft" style="width:100%;gap:4px" href="#/plans" aria-label="Swap meals with Core">' + lock + 'Swap</a>') + '<button class="btn small soft" style="width:100%" data-a="ate" data-v="' + m.slot + '" aria-pressed="' + (m.status === "ate") + '">' + (m.status === "ate" ? "Undo" : "Ate it") + "</button></div></div>").join("") +
-      (full() ? '<a class="btn mint" href="#/grocery">This week\'s grocery list</a>' : upsell("Your weekly grocery list", "Get every ingredient for the week in one list, plus meal swaps that fit how you eat.")) + '<p class="small muted center">Change your diet or allergies anytime in your profile.</p>', "eat");
+      (full() ? '<a class="btn mint" href="#/grocery">This week\'s grocery list ' + ptag("core") + '</a>' : upsell("Your weekly grocery list", "Get every ingredient for the week in one list, plus meal swaps that fit how you eat.")) + '<button class="btn soft" data-a="ask" data-v="Give me an easy high-protein meal idea for today that fits how I eat">' + I.flower + ' Ask Coach Faith for a meal idea</button>' +
+      '<p class="small muted center">Change your diet or allergies anytime in your profile.</p>', "eat");
   }
 
   function recipeScreen(id) {
@@ -334,6 +401,17 @@
   }
 
   // ---------- progress ----------
+  function weeklyCard() {
+    const d = state.data, ws = E.weekStart(), from = E.parseDate(today()).getTime() - 7 * 86400000;
+    const recent = d.workouts.filter(w => E.parseDate(w.date).getTime() >= from);
+    const mins = recent.reduce((n, w) => n + (w.minutes || 0), 0);
+    const stepDays = Object.values(d.daily || {}).filter(x => x.steps && E.parseDate(x.date).getTime() >= from);
+    const avgSteps = stepDays.length ? Math.round(stepDays.reduce((n, x) => n + x.steps, 0) / stepDays.length) : 0;
+    const stats = '<div class="chips"><span class="chip">' + recent.length + " workout" + (recent.length === 1 ? "" : "s") + '</span><span class="chip">' + mins + ' min</span>' + (avgSteps ? '<span class="chip">' + avgSteps.toLocaleString() + " steps a day</span>" : "") + "</div>";
+    if (hasCoach() || tier() === "trial") return coachNote("weekly", ws, "Your weekly check-in · last 7 days", "how am I doing this week", stats);
+    return noteCard("Your week · last 7 days", "cn-week", esc(recent.length ? "You showed up " + recent.length + (recent.length === 1 ? " time" : " times") + " in the last 7 days. Every session counts, and you're building something that lasts." : "A new week is a fresh start. One workout is all it takes to begin again."), stats + '<a class="link" href="#/plans" style="padding:0;align-self:flex-start">Get a personal weekly review with AI Coach</a>');
+  }
+
   function progressScreen() {
     const d = state.data, p = d.profile, target = p.setup.days || 3;
     const total = d.workouts.length, weeks = E.weeksOnTrack(d.workouts, target);
@@ -347,7 +425,7 @@
       const pts = loads[lift].slice(-8), max = Math.max(...pts.map(x => x.weight));
       const firstW = loads[lift][0].weight, lastW = loads[lift][loads[lift].length - 1].weight;
       gain = lastW - firstW;
-      liftCard = '<div class="card"><div class="ex"><span class="label">Strength</span>' + (names.length > 1 ? '<select data-in="lift" aria-label="Choose exercise" style="border:1px solid var(--line);border-radius:10px;padding:4px 8px;background:var(--card)">' + names.map(n => "<option" + (n === lift ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>" : "") + "</div><b>" + esc(lift) + '</b><div class="bars" role="img" aria-label="' + esc(lift) + " weight over the last " + pts.length + " sessions, from " + pts[0].weight + " to " + pts[pts.length - 1].weight + ' pounds">' + pts.map(x => '<i style="height:' + Math.max(6, Math.round(x.weight / max * 100)) + '%"></i>').join("") + '</div><div class="ex small muted"><span>' + pts[0].weight + " lb</span><b style=\"color:var(--ink)\">Now " + pts[pts.length - 1].weight + " lb</b></div></div>";
+      liftCard = '<div class="card"><div class="ex"><span class="label">Strength ' + ptag("core") + '</span>' + (names.length > 1 ? '<select data-in="lift" aria-label="Choose exercise" style="border:1px solid var(--line);border-radius:10px;padding:4px 8px;background:var(--card)">' + names.map(n => "<option" + (n === lift ? " selected" : "") + ">" + esc(n) + "</option>").join("") + "</select>" : "") + "</div><b>" + esc(lift) + '</b><div class="bars" role="img" aria-label="' + esc(lift) + " weight over the last " + pts.length + " sessions, from " + pts[0].weight + " to " + pts[pts.length - 1].weight + ' pounds">' + pts.map(x => '<i style="height:' + Math.max(6, Math.round(x.weight / max * 100)) + '%"></i>').join("") + '</div><div class="ex small muted"><span>' + pts[0].weight + " lb</span><b style=\"color:var(--ink)\">Now " + pts[pts.length - 1].weight + " lb</b></div></div>";
     }
     const hide = p.settings && p.settings.hideWeight;
     let bodyCard;
@@ -366,6 +444,7 @@
     const recent = d.workouts.slice(-5).reverse();
     return page('<div class="top">' + flower("#9ED3CF", 34, "right:18px;top:24px") + '<span class="eyebrow">' + (total ? total + " workout" + (total === 1 ? "" : "s") + " so far" : "Your journey starts here") + '</span><h1 class="title">' + (total ? "You're growing stronger." : "Every journey starts with one step.") + "</h1>" +
       '<div class="stats"><div class="stat"><b>' + total + '</b><small>workouts</small></div><div class="stat"><b>' + weeks + '</b><small>weeks on track</small></div><div class="stat" style="background:var(--coral);color:#fff"><b>' + (gain > 0 ? "+" + gain : gain || 0) + '</b><small style="color:#fff">lb ' + esc(lift ? "on " + lift.split(" ").slice(-1)[0].toLowerCase() : "gained") + "</small></div></div></div>" +
+      weeklyCard() +
       (full() ? liftCard : upsell("Strength charts", "See every lift climb week by week. Core also adds weight and reps for you as you get stronger.")) + bodyCard +
       (recent.length ? '<div class="card"><span class="label">Recent workouts</span><ul class="list small">' + recent.map(w => "<li><span style=\"flex:1\"><b>" + esc(w.name) + "</b><br><span class=\"muted\">" + E.parseDate(w.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " + w.minutes + " min</span></span><span class=\"chip\">" + ({ easy: "Easy", right: "Just right", hard: "Tough" }[w.effort] || "") + "</span></li>").join("") + "</ul></div>" : "") +
       '<p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">Faithful in little, growing in much.</p>', "progress");
@@ -374,14 +453,14 @@
   // ---------- coach ----------
   function coachScreen() {
     const d = state.data;
-    const al = savedAllowance(), saved = !hasCoach();
-    const out = saved && al.left !== null && al.left <= 0;
-    const trialBar = saved ? '<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>' + (al.left === null ? "<b>Coach Faith:</b> saved replies" : "<b>" + al.label + ":</b> " + al.left + " of " + al.limit + " messages left") + '</span><a class="link" href="#/plans" style="padding:0">Get AI Coach</a></div>' : "";
+    const saved = !hasCoach(), out = false;
+    const preview = tier() === "trial";
+    const trialBar = saved ? '<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>' + (preview ? "AI Coach preview:</b> answers from your own plan during your trial" : "Coach Faith:</b> " + (basicCoach() ? "everyday encouragement" : "full library")) + '</span><a class="link" href="#/plans" style="padding:0;white-space:nowrap">' + (basicCoach() ? "See plans" : "Get AI Coach") + '</a></div>' : "";
     const msgs = d.coach.length ? d.coach : [{ role: "assistant", content: "Hi" + (firstName() ? " " + firstName() : "") + "! I'm your Built by Faith coach. I know your plan and I'm here to help you keep going, especially on the hard days. What's on your mind?" }];
     return page('<div class="top" style="padding-bottom:16px">' + flower("#9ED3CF", 28, "right:18px;top:24px") + '<span class="eyebrow">Your coach</span><h1 class="title" style="font-size:24px">Here for you, every step.</h1></div>' + trialBar +
-      '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
-      (d.coach.length < 2 ? '<div class="starters">' + ["I'm tired today", "I fell off track", "Swap an exercise", "What should I eat?", "I need encouragement"].map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
-      (out ? '<div class="card hl"><h3>' + (tier() === "free" ? "That\'s today\'s messages" : "You\'ve used your free messages") + '</h3><p class="small">I\'ve loved cheering you on! ' + (tier() === "free" ? "I\'ll be back tomorrow, or c" : "C") + 'hoose AI Coach to talk with me any time, up to 100 messages a day.</p><a class="btn" href="#/plans">See plans</a></div>' : "") +
+      (state.session ? '<a class="btn soft small" href="#/workout" style="align-self:flex-start">Back to your workout</a>' : "") + '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
+      (d.coach.length < 2 ? '<div class="starters">' + (tier() === "trial" ? ["My knees hurt and I only have 15 minutes", "I'm tired today", "What should I eat today?", "How am I doing?", "What's my workout today?"] : ["I'm tired today", "I fell off track", "Swap an exercise", "What should I eat?", "I need encouragement"]).map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
++
       '<p class="small muted center" style="margin-bottom:70px">Your coach gives fitness encouragement, not medical advice.</p>' +
       (out ? "" : '<form class="composer" data-f="coach"><label for="cm" style="position:absolute;left:-9999px">Message your coach</label><input id="cm" autocomplete="off" placeholder="Message your coach" maxlength="600"><button class="btn small" type="submit">Send</button></form>'), "coach");
   }
@@ -395,8 +474,9 @@
     const context = { name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
     try {
       if (!hasCoach()) {
-        const al = savedAllowance();
-        const r = await S.trialCoach(text, context, al.limit, al.since);
+        let preview = null;
+        if (tier() === "trial" && window.BBF_PREVIEW) { try { preview = window.BBF_PREVIEW.reply(text, state.data); } catch (e) {} }
+        const r = await S.trialCoach(text, context, basicCoach(), preview);
         if (r.reply) d.coach.push({ role: "assistant", content: r.reply }); else d.coach.pop();
         state.typing = false; render(); scrollChat(); return;
       }
@@ -410,14 +490,52 @@
   }
   function scrollChat() { setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 30); }
 
+  // ---------- quick edit of one plan answer ----------
+  function editScreen(key) {
+    if (!state.setup) state.setup = JSON.parse(JSON.stringify(state.data.profile.setup));
+    const s = state.setup, st = SETUP.find(x => x.key === key);
+    if (!st) { go("#/profile"); return ""; }
+    const v = s[st.key];
+    let body;
+    if (st.date) body = '<div class="field"><label for="rd">Race date</label><input id="rd" type="date" value="' + esc(v || "") + '" min="' + today() + '"></div><p class="small muted">Leave it empty if you don\'t have a date yet.</p>';
+    else body = '<div class="opts' + (st.grid ? " grid" : "") + '">' + st.opts.map(o => opt(st.multi ? (v || []).includes(o[0]) : v === o[0], o[1], o[2], "pick", JSON.stringify([st.key, o[0], !!st.multi]))).join("") + "</div>";
+    if (st.dislikes) body += '<div class="field"><label for="dl">Foods you just don\'t like (optional)</label><input id="dl" maxlength="200" placeholder="e.g. mushrooms, olives" value="' + esc(s.dislikes || "") + '"></div>';
+    return page('<div class="top"><div class="row"><button class="icon-btn" data-a="cancelEdit" aria-label="Back">' + I.back + '</button></div><span class="eyebrow">' + st.eb + '</span><h1 class="title">' + st.q + '</h1><p class="sub">' + st.hint + "</p></div>" + body +
+      '<div class="setup-foot"><button class="btn" data-a="saveEdit">Save</button><button class="btn soft" data-a="cancelEdit">Cancel</button></div>', null, "no-nav");
+  }
+
+  // ---------- browse recipes ----------
+  function recipesScreen() {
+    const setup = state.data.profile.setup, slots = ["breakfast", "lunch", "dinner", "snack"], cur = state.recipeSlot || "all";
+    const names = { all: "All", breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snacks" };
+    const shown = cur === "all" ? slots : [cur];
+    const total = slots.reduce((n, sl) => n + E.recipesFor(setup, sl).length, 0);
+    return page('<div class="top">' + flower("#E7DCA2", 30, "right:18px;top:20px") + '<div class="row"><a class="icon-btn" href="#/eat" aria-label="Back to meals">' + I.back + '</a></div><span class="eyebrow">' + total + ' recipes that fit you</span><h1 class="title">Browse recipes</h1><p class="sub">Every recipe here fits your way of eating and leaves out your allergies.</p>' +
+      '<div class="chips">' + Object.keys(names).map(k => '<button class="chip filter' + (cur === k ? " on" : "") + '" data-a="recipeFilter" data-v="' + k + '">' + names[k] + "</button>").join("") + "</div></div>" +
+      shown.map(sl => { const list = E.recipesFor(setup, sl); return '<span class="label">' + names[sl === "snack" ? "snack" : sl] + " · " + list.length + "</span>" + list.map(r =>
+        '<div class="card recipe-row"><a href="#/recipe/' + r.id + '" style="text-decoration:none;color:inherit"><h3 style="font-size:17px">' + esc(r.name) + '</h3><span class="small muted">' + r.protein + " g protein · " + r.minutes + " min</span></a>" +
+        (full() ? '<button class="btn small soft" data-a="useRecipe" data-v="' + sl + "|" + r.id + '">Use for today\'s ' + sl + "</button>" : '<a class="btn small soft" href="#/plans" style="gap:4px">' + lock + " Add to today with Core</a>") + "</div>").join(""); }).join("") +
+      '<button class="btn soft" data-a="editField" data-v="diet" data-back="#/recipes">Change my way of eating</button>', "eat");
+  }
+
   // ---------- profile ----------
+  function planRows(s) {
+    const lbl = (key, v) => { const st = SETUP.find(x => x.key === key); if (!st || !st.opts) return v; const f = o => (st.opts.find(x => x[0] === o) || [o, o])[1]; return Array.isArray(v) ? (v.length ? v.map(f).join(", ") : "None") : f(v); };
+    const rows = [["programs", "Programs", (s.programs || []).map(k => C.PROGRAMS[k].name).join(" + ")], ["experience", "Experience", lbl("experience", s.experience)], ["days", "Days a week", s.days + " days"], ["minutes", "Workout length", lbl("minutes", s.minutes)],
+      ["place", "Where you train", lbl("place", s.place || [])], ["injuries", "Areas to protect", lbl("injuries", (s.injuries || []).length ? s.injuries : [])], ["diet", "Way of eating", lbl("diet", s.diet)], ["allergies", "Allergies and dislikes", lbl("allergies", s.allergies || []) + (s.dislikes ? " · no " + s.dislikes : "")]];
+    if ((s.programs || []).includes("race")) rows.push(["raceDate", "Race date", s.raceDate ? E.parseDate(s.raceDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "No date yet"]);
+    return '<div class="card"><span class="label">Your plan · tap to change</span><ul class="list">' + rows.map(r => '<li><button class="edit-row" data-a="editField" data-v="' + r[0] + '"><span><small>' + r[1] + "</small>" + esc(r[2] || "Not set") + '</span><b aria-hidden="true">›</b></button></li>').join("") + "</ul></div>";
+  }
+
   function profileScreen() {
     const d = state.data, p = d.profile, s = p.setup;
-    const planName = { coach: "AI Coach", core: "Core", trial: "Free trial · " + trial().daysLeft + (trial().daysLeft === 1 ? " day" : " days") + " left", free: "Free" }[tier()];
+    const freeUntil = d.status === "trialing" && d.periodEnd ? " · free until " + fmtDay(d.periodEnd) : "";
+    const planName = { coach: "AI Coach" + freeUntil, core: "Core" + freeUntil, trial: "Free trial · " + trial().daysLeft + (trial().daysLeft === 1 ? " day" : " days") + " left", free: "Free" }[tier()];
     return page('<a class="icon-btn" href="#/today" aria-label="Back to today" style="background:var(--card)">' + I.back + '</a><h1 class="title">Your profile</h1>' +
       '<form data-f="name" class="card"><div class="field"><label for="pn">First name</label><input id="pn" value="' + esc(p.name) + '"></div><button class="btn soft small" type="submit">Save name</button></form>' +
-      '<div class="card"><span class="label">Your plan</span><p><b>' + esc((s.programs || []).map(k => C.PROGRAMS[k].name).join(" + ")) + '</b></p><p class="small muted">' + s.days + " days a week · " + s.minutes + " min · " + esc(s.diet) + '</p><button class="btn soft small" data-a="redoSetup">Change my answers</button></div>' +
+      planRows(s) +
       '<div class="card"><span class="label">Membership</span><p><b>' + planName + "</b>" + "" + "</p>" + (d.plan === "core" ? '<button class="btn small" data-a="checkout" data-v="coach">Add the AI coach</button>' : "") + (d.plan !== "none" ? '<button class="btn soft small" data-a="portal">Manage or cancel</button>' : '<a class="btn small" href="#/plans">Choose a plan</a>') + "</div>" +
+      '<div class="card"><span class="label">Daily step goal</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + [5000, 7000, 8000, 10000, 12000, 15000].map(g => '<button class="opt' + (((p.settings || {}).stepGoal || 7000) === g ? " on" : "") + '" style="min-height:44px;justify-content:center;padding:6px" data-a="stepGoal" data-v="' + g + '">' + g.toLocaleString() + "</button>").join("") + "</div></div>" +
       '<div class="card"><span class="label">Preferences</span><button class="opt' + (s && p.settings && p.settings.hideWeight ? " on" : "") + '" data-a="toggleWeight" aria-pressed="' + !!(p.settings && p.settings.hideWeight) + '"><span>Hide body weight<small>Focus on strength and consistency</small></span><span class="tk">' + I.check + "</span></button></div>" +
       '<button class="btn soft" data-a="signOut">Sign out</button>' +
       (state.confirmDelete ? '<div class="card" style="border-color:var(--coral)"><p><b>Delete all your data?</b></p><p class="small">This removes your workouts, meals, progress and coach messages. It can\'t be undone.' + (d.plan !== "none" ? " Cancel your membership first under Manage or cancel." : "") + '</p><div class="confirm"><button class="btn soft small" data-a="cancelDelete">Keep my data</button><button class="btn small" data-a="deleteData">Delete everything</button></div></div>' : '<button class="link center" data-a="askDelete">Delete my data</button>') +
@@ -429,7 +547,9 @@
     const h = (location.hash || "#/").slice(2);
     const [r, a] = h.split("/");
     const route = r.split("?")[0];
-    window.scrollTo && route !== "coach" && route !== "workout" && window.scrollTo(0, 0);
+    const routeKey = r + "/" + (a || "");
+    if (routeKey !== state.lastRoute && route !== "coach" && window.scrollTo) window.scrollTo(0, 0);
+    state.lastRoute = routeKey;
     if (route === "new-password") { root.innerHTML = authForm("new-password"); return; }
     if (!state.user) {
       if (route === "setup") { if (!state.setup) state.setup = loadPending() || blankSetup(); root.innerHTML = setupScreen(+a || 0); return; }
@@ -457,10 +577,17 @@
     }
     if (route === "setup") { if (!state.setup) state.setup = JSON.parse(JSON.stringify(p.setup)); root.innerHTML = setupScreen(+a || 0); return; }
     if (!hasAccess() && route !== "plans" && route !== "profile") return go("#/plans");
+    if (tier() === "free" && route === "today") {
+      const k = "bbf_trial_end_seen_" + ((state.user && state.user.id) || "demo");
+      let seen = false; try { seen = localStorage.getItem(k); } catch (e) {}
+      if (!seen && state.data.trialStarted) { try { localStorage.setItem(k, "1"); } catch (e) {} return go("#/plans"); }
+    }
     const screens = { today: todayScreen, plans, workout: workoutScreen, finish: finishScreen, eat: eatScreen, grocery: groceryScreen, progress: progressScreen, coach: coachScreen, profile: profileScreen };
     if (route === "recipe") { root.innerHTML = recipeScreen(a); return; }
+    if (route === "edit") { root.innerHTML = editScreen(a); return; }
+    if (route === "recipes") { root.innerHTML = recipesScreen(); return; }
     root.innerHTML = (screens[route] || todayScreen)();
-    if (route === "coach") scrollChat();
+    if (route === "coach") { scrollChat(); if (state.ask) { const q = state.ask; state.ask = null; sendCoach(q); } }
   }
 
   // ---------- actions ----------
@@ -537,14 +664,20 @@
     finishWorkout() { stopTimer(); go("#/finish"); },
     async effort(el) { await act(() => saveWorkout(el.dataset.v)); },
     async swap(el) {
-      const slot = el.dataset.v, daily = state.data.daily[today()] || {}, meals = Object.assign({}, daily.meals || {});
+      const slot = el.dataset.v, t = today(), daily = state.data.daily[t] || {}, meals = Object.assign({}, daily.meals || {});
       meals[slot] = { swap: ((meals[slot] || {}).swap || 0) + 1, status: null };
-      await act(async () => { await S.saveDaily(today(), { meals }); await reload(); render(); });
+      await quick(d => { d.daily[t] = Object.assign({ date: t }, d.daily[t], { meals }); }, () => S.saveDaily(t, { meals }));
     },
     async ate(el) {
-      const slot = el.dataset.v, daily = state.data.daily[today()] || {}, meals = Object.assign({}, daily.meals || {});
+      const slot = el.dataset.v, t = today(), daily = state.data.daily[t] || {}, meals = Object.assign({}, daily.meals || {});
       const cur = meals[slot] || {}; meals[slot] = Object.assign({}, cur, { status: cur.status === "ate" ? null : "ate" });
-      await act(async () => { await S.saveDaily(today(), { meals }); await reload(); render(); });
+      await quick(d => { d.daily[t] = Object.assign({ date: t }, d.daily[t], { meals }); }, () => S.saveDaily(t, { meals }), meals[slot].status === "ate" ? "Nice! Meal logged." : null);
+    },
+    async useRecipe(el) {
+      const [slot, id] = el.dataset.v.split("|"), t = today(), daily = state.data.daily[t] || {}, meals = Object.assign({}, daily.meals || {});
+      meals[slot] = { pick: id, status: null };
+      await quick(d => { d.daily[t] = Object.assign({ date: t }, d.daily[t], { meals }); }, () => S.saveDaily(t, { meals }), "Added to today's " + slot + ".");
+      go("#/eat");
     },
     groc(el) {
       const k = "bbf_grocery_" + E.weekStart(); let got = {};
@@ -553,9 +686,25 @@
       try { localStorage.setItem(k, JSON.stringify(got)); } catch (e) {}
       const y = window.scrollY; render(); window.scrollTo(0, y);
     },
-    async toggleWeight() { const st = Object.assign({}, state.data.profile.settings); st.hideWeight = !st.hideWeight; await act(async () => { await S.saveProfile({ settings: st }); await reload(); render(); }); },
+    async toggleWeight() { const st = Object.assign({}, state.data.profile.settings); st.hideWeight = !st.hideWeight; await quick(d => { d.profile.settings = st; }, () => S.saveProfile({ settings: st }), st.hideWeight ? "Body weight hidden." : "Body weight showing."); },
+    async stepGoal(el) { const st = Object.assign({}, state.data.profile.settings, { stepGoal: +el.dataset.v }); await quick(d => { d.profile.settings = st; }, () => S.saveProfile({ settings: st }), "Step goal set to " + (+el.dataset.v).toLocaleString() + "."); },
+    recipeFilter(el) { state.recipeSlot = el.dataset.v; render(); },
+    editField(el) { state.setup = JSON.parse(JSON.stringify(state.data.profile.setup)); state.editBack = el.dataset.back || "#/profile"; go("#/edit/" + el.dataset.v); },
+    async saveEdit() {
+      const s = state.setup; if (!s) return go("#/profile");
+      const dl = document.getElementById("dl"); if (dl) s.dislikes = dl.value.trim().slice(0, 200);
+      const rd = document.getElementById("rd"); if (rd) s.raceDate = rd.value || null;
+      s.injuries = (s.injuries || []).filter(x => x !== "none"); s.allergies = (s.allergies || []).filter(x => x !== "none");
+      if (!s.programs || !s.programs.length || !s.place || !s.place.length) return toast("Pick at least one option.");
+      const setup = JSON.parse(JSON.stringify(s)), back = state.editBack || "#/profile";
+      state.setup = null;
+      go(back);
+      await quick(d => { d.profile.setup = setup; }, () => S.saveProfile({ setup }), "Saved. Your plan is updated.");
+    },
+    cancelEdit() { state.setup = null; go(state.editBack || "#/profile"); },
     weightOpen() { state.weightOpen = true; render(); },
     starter(el) { sendCoach(el.dataset.v); },
+    ask(el) { state.ask = el.dataset.v; if (state.session) toast("Your workout is paused. Tap Back to your workout when you're ready."); go("#/coach"); },
     redoSetup() { state.setup = JSON.parse(JSON.stringify(state.data.profile.setup)); go("#/setup/0"); },
     askDelete() { state.confirmDelete = true; render(); },
     cancelDelete() { state.confirmDelete = false; render(); },
@@ -592,10 +741,20 @@
       const pw = val("pw"); if (pw.length < 8) return err("Use at least 8 characters.");
       await act(async () => { await S.setPassword(pw); toast("Password saved."); state.user = await S.user(); go("#/today"); });
     },
-    async steps() { const n = Math.min(150000, Math.max(0, parseInt(val("st"), 10) || 0)); await act(async () => { await S.saveDaily(today(), { steps: n }); state.stepsOpen = false; await reload(); render(); }); },
-    async weight() { const w = parseFloat(val("wt")); if (!w || w < 50 || w > 700) return toast("Enter your weight in pounds."); await act(async () => { await S.addBody(today(), w); state.weightOpen = false; await reload(); render(); }); },
+    async steps() {
+      const raw = val("st").replace(/[, ]/g, ""), n = Math.min(150000, Math.max(0, parseInt(raw, 10) || 0)), t = today();
+      if (!raw) return toast("Type your steps, like 6500.");
+      state.stepsOpen = false;
+      await quick(d => { d.daily[t] = Object.assign({ date: t }, d.daily[t], { steps: n }); }, () => S.saveDaily(t, { steps: n }), n.toLocaleString() + " steps saved. Every step counts!");
+    },
+    async weight() {
+      const w = Math.round(parseFloat(val("wt").replace(",", ".")) * 10) / 10, t = today();
+      if (!w || w < 50 || w > 700) return toast("Enter your weight in pounds, like 165.");
+      state.weightOpen = false;
+      await quick(d => { d.body = d.body.filter(b => b.date !== t).concat({ date: t, weight: w }).sort((a, b) => a.date.localeCompare(b.date)); }, () => S.addBody(t, w), "Weigh-in saved: " + w + " lb.");
+    },
     async coach() { const v = val("cm"); document.getElementById("cm").value = ""; await sendCoach(v); },
-    async name() { await act(async () => { await S.saveProfile({ name: val("pn") }); await reload(); toast("Saved."); }); }
+    async name() { const n = val("pn").slice(0, 40); if (!n) return toast("Add your first name."); await quick(d => { d.profile.name = n; }, () => S.saveProfile({ name: n }), "Name saved."); }
   };
   const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
   const err = m => { const e = document.getElementById("err"); if (e) e.textContent = m; };

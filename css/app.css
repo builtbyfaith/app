@@ -60,6 +60,22 @@ p{margin:0}
 .plan-list li{display:flex;gap:8px;font-size:14px;line-height:1.4}
 .plan-list svg{flex:none;margin-top:2px;color:var(--sage)}
 .upsell{background:#FFFBF5;border-style:dashed}
+.coach-note{background:linear-gradient(135deg,#FFF8F3,#F1F8F6);border-color:#F0DDD3}
+.cn-head{display:flex;align-items:center;gap:8px}
+.cn-av{width:30px;height:30px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 2px 8px rgba(31,42,51,.08)}
+.cn-text{font-size:15px;line-height:1.5}
+.link.ask{display:flex;align-items:center;gap:6px;font-size:14px;align-self:flex-start;padding:4px 0}
+.ptag{display:inline-block;vertical-align:middle;font-family:var(--body);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--mint-soft);color:#2A7C74;margin-left:4px}
+.ptag-coach{background:#FBE7E1;color:var(--coral)}
+.edit-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:none;border:0;padding:0;text-align:left;cursor:pointer;color:var(--ink);font-size:15px;font-weight:700}
+.edit-row small{display:block;font-size:12px;font-weight:700;color:var(--muted)}
+.edit-row b{color:var(--coral);font-size:22px;line-height:1}
+.chip.filter{border:1.5px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
+.chip.filter.on{background:var(--coral);border-color:var(--coral);color:#fff}
+.recipe-row{gap:8px}
+.recipe-row .btn{align-self:flex-start}
+.toast{animation:pop .25s ease-out}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}}
 /* welcome card */
 .hero-card{background:#FFFDF9;border:1px solid var(--line);border-radius:30px;overflow:hidden;box-shadow:0 24px 60px rgba(31,42,51,.08)}
 .hc-top{position:relative;padding:22px 20px 22px;background:linear-gradient(135deg,#F6E5DE 0%,#E6F2EF 55%,#F7F1DC 100%);display:flex;flex-direction:column;gap:8px}

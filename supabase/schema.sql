@@ -65,6 +65,19 @@ alter table public.subscriptions add column if not exists current_period_end tim
 alter table public.subscriptions add column if not exists had_trial boolean default false;
 alter table public.subscriptions add column if not exists trial_started_at timestamptz default now();
 
+
+-- If log tables already existed from an older app, add any missing columns (safe to run again).
+alter table public.workout_logs add column if not exists date date;
+alter table public.workout_logs add column if not exists name text;
+alter table public.workout_logs add column if not exists program text;
+alter table public.workout_logs add column if not exists energy text;
+alter table public.workout_logs add column if not exists effort text;
+alter table public.workout_logs add column if not exists minutes int;
+alter table public.workout_logs add column if not exists exercises jsonb;
+alter table public.daily_logs add column if not exists steps int;
+alter table public.daily_logs add column if not exists meals jsonb;
+alter table public.body_logs add column if not exists weight numeric;
+
 -- Older columns this app doesn't use must not block new sign-ups.
 do $$
 declare c record;
@@ -135,6 +148,20 @@ alter table public.body_logs drop constraint if exists body_logs_size;
 alter table public.body_logs add constraint body_logs_size check (weight is null or weight between 40 and 1000);
 alter table public.coach_messages drop constraint if exists coach_messages_size;
 alter table public.coach_messages add constraint coach_messages_size check (char_length(content) <= 4000);
+
+-- Coach Faith's notes (daily note, workout feedback, weekly review), written once and saved.
+create table if not exists public.coach_insights (
+  id bigserial primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('daily','workout','weekly')),
+  key text not null,
+  content text not null check (char_length(content) <= 2000),
+  updated_at timestamptz default now(),
+  unique (user_id, kind, key)
+);
+alter table public.coach_insights enable row level security;
+drop policy if exists "own insights read" on public.coach_insights;
+create policy "own insights read" on public.coach_insights for select using (auth.uid() = user_id);
 
 -- Give anyone who signed up before this ran a profile and subscription row.
 insert into public.profiles (id, name) select id, coalesce(raw_user_meta_data->>'name','') from auth.users on conflict (id) do nothing;

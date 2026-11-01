@@ -3,7 +3,7 @@
 const { admin, json, readBody, guard } = require("../lib/shared");
 const systemPrompt = require("../lib/coach-personality");
 
-const DAILY_LIMIT = parseInt(process.env.COACH_DAILY_LIMIT || "100", 10);
+const DAILY_LIMIT = parseInt(process.env.COACH_DAILY_LIMIT || "50", 10);
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const CRISIS = /(kill myself|suicide|end my life|hurt myself|self[- ]harm|don'?t want to live)/i;
 

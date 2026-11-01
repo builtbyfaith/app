@@ -38,15 +38,13 @@
     live,
 
     // used: how many trial messages were sent since the trial started (counted on this device)
-    async trialCoach(message, context, limit, since) {
+    async trialCoach(message, context, basic, preset) {
       const u = await this.user(); const id = (u && u.id) || "demo";
       const list = trialChat(id);
-      const used = list.filter(m => m.role === "user" && (m.at || 0) >= (since || 0)).length;
-      if (used >= limit) return { reply: null, left: 0 };
-      const reply = window.BBF_DEMO_COACH(message, context), now = Date.now();
+      const reply = preset || window.BBF_DEMO_COACH(message, context, { basic }), now = Date.now();
       list.push({ role: "user", content: message, at: now }, { role: "assistant", content: reply, at: now });
       saveTrialChat(id, list);
-      return { reply, left: Math.max(0, limit - used - 1) };
+      return { reply };
     },
 
     async user() {
@@ -91,7 +89,7 @@
         const d = readDemo();
         if (!d.trialStarted) { d.trialStarted = new Date().toISOString(); writeDemo(d); }
         const paidCoach = d.plan === "coach";
-        return { profile: d.profile, plan: d.plan, status: d.status, trialStarted: d.trialStarted, workouts: d.workouts, daily: d.daily, body: d.body, coach: paidCoach ? d.coach : trialChat("demo") };
+        return { profile: d.profile, plan: d.plan, status: d.status, periodEnd: d.periodEnd || null, trialStarted: d.trialStarted, workouts: d.workouts, daily: d.daily, body: d.body, coach: paidCoach ? d.coach : trialChat("demo") };
       }
       const u = await this.user();
       const since = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
@@ -108,7 +106,7 @@
       const sub = must(s) || {};
       const plan = sub.plan || "none";
       const paidCoach = plan === "coach" && ["active", "trialing", "past_due"].includes(sub.status);
-      return { profile: { name: prof.name || "", setup: prof.setup, settings: prof.settings || {}, progression: prof.progression || {} }, plan, status: sub.status || null,
+      return { profile: { name: prof.name || "", setup: prof.setup, settings: prof.settings || {}, progression: prof.progression || {} }, plan, status: sub.status || null, periodEnd: sub.current_period_end || null,
         trialStarted: sub.trial_started_at || u.created || new Date().toISOString(), workouts: must(w) || [], daily, body: must(b) || [], coach: paidCoach ? (must(c) || []) : trialChat(u.id) };
     },
 
@@ -151,8 +149,18 @@
       catch (e) { if (e.network || e.status >= 500) return backup(); throw e; }
     },
 
+    // Coach Faith's notes (AI Coach members). Demo mode has no AI, so the app shows saved notes instead.
+    async insight(kind, key, refresh) {
+      if (!live) return { text: "" };
+      return call("coach-insight", { kind, key, refresh: !!refresh });
+    },
+
     async startCheckout(plan) {
-      if (!live) { const d = readDemo(); d.plan = plan; d.status = "trialing"; writeDemo(d); return { demo: true }; }
+      if (!live) {
+        const d = readDemo(), ends = new Date(d.trialStarted || Date.now()).getTime() + 3 * 86400000;
+        d.plan = plan; d.status = ends > Date.now() ? "trialing" : "active"; d.periodEnd = new Date(ends > Date.now() ? ends : Date.now() + 30 * 86400000).toISOString();
+        writeDemo(d); return { demo: true };
+      }
       const { url } = await call("create-checkout", { plan });
       location.href = url;
     },

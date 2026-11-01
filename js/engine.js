@@ -168,7 +168,8 @@
     return ["breakfast", "lunch", "dinner", "snack"].map(slot => {
       const list = recipesFor(setup, slot);
       const m = meals[slot] || {};
-      const recipe = list.length ? pick(list, n + (m.swap || 0)) : null;
+      const chosen = m.pick && list.find(r => r.id === m.pick);
+      const recipe = chosen || (list.length ? pick(list, n + (m.swap || 0)) : null);
       return { slot, recipe, status: m.status || null, swap: m.swap || 0, options: list.length };
     }).filter(m => m.recipe);
   }
@@ -204,5 +205,5 @@
     return count;
   }
 
-  window.BBF_ENGINE = { dateStr, parseDate, dayNumber, weekStart, dailyWord, affirmation, buildToday, progress, mealsFor, groceryList, proteinToday, workoutsThisWeek, daysSinceLast, weeksOnTrack, raceWeeks, mainProgram };
+  window.BBF_ENGINE = { recipesFor, dateStr, parseDate, dayNumber, weekStart, dailyWord, affirmation, buildToday, progress, mealsFor, groceryList, proteinToday, workoutsThisWeek, daysSinceLast, weeksOnTrack, raceWeeks, mainProgram };
 })();

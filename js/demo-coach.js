@@ -215,7 +215,8 @@
 
   // Add the larger saved library (js/coach-library.js) to each topic
   const EXTRA = window.BBF_COACH_EXTRA || {};
-  TOPICS.forEach(tp => { if (EXTRA[tp.id]) tp.replies = tp.replies.concat(EXTRA[tp.id]); });
+  // Free members get the starter set (tp.base); Core, trial and AI Coach members (when offline) get the full library.
+  TOPICS.forEach(tp => { tp.base = tp.replies.slice(); if (EXTRA[tp.id]) tp.replies = tp.replies.concat(EXTRA[tp.id]); });
 
   const DEFAULT = [
     "I'm here for you{name}. Tell me how you're feeling, what's getting in the way, or what you'd like to change, and we'll figure out the next small step together.",
@@ -281,20 +282,22 @@
     return r;
   }
 
-  window.BBF_DEMO_COACH = function (message, ctx) {
+  window.BBF_DEMO_COACH = function (message, ctx, opts) {
+    const basic = !!(opts && opts.basic);
+    const pool = tp => basic ? tp.base : tp.replies;
     const t = " " + String(message || "").toLowerCase().replace(/[\u2019]/g, "'") + " ";
     const msgKeys = keyWords(t);
     // Safety first, in order
-    for (const tp of TOPICS) if (tp.safety && tp.words.some(w => has(t, w))) return fill(choose(tp.replies, msgKeys), ctx);
+    for (const tp of TOPICS) if (tp.safety && tp.words.some(w => has(t, w))) return fill(choose(pool(tp), msgKeys), ctx);
     // Otherwise the topic whose words (and best reply) match the message most
     let best = null, score = 0;
     for (const tp of TOPICS) {
       if (tp.safety) continue;
       let s = tp.words.reduce((n, w) => n + (has(t, w) ? (w.includes(" ") ? 2 : 1) : 0), 0) * (tp.weight || 1);
-      if (s > 0) s += 0.25 * Math.min(4, Math.max.apply(null, tp.replies.map(r => overlap(msgKeys, r))));
+      if (s > 0) s += 0.25 * Math.min(4, Math.max.apply(null, pool(tp).map(r => overlap(msgKeys, r))));
       if (s > score) { best = tp; score = s; }
     }
-    let reply = fill(choose(best ? best.replies : DEFAULT, msgKeys), ctx);
+    let reply = fill(choose(best ? pool(best) : DEFAULT, msgKeys), ctx);
     // About one reply in four gets a verse, if it doesn't already have one
     if (best && best.id !== "greeting" && best.id !== "app" && !/\(\w+ \d/.test(reply) && !/God|LORD|Lord|grace|courage|mercies|weary|faint|made\b/.test(reply) && Math.random() < 0.25) {
       reply += " " + VERSES[Math.floor(Math.random() * VERSES.length)];

@@ -1,6 +1,21 @@
-// Starts a Stripe Checkout for Core or AI coach. The free trial happens in the app first (no card), so billing starts right away.
+// Starts a Stripe Checkout for Core or AI Coach.
+// Right now no card is asked for during the free trial: members choose a plan after it ends.
+// Later, set CARD_FOR_TRIAL=true in Netlify to let them choose during the trial (card collected,
+// billing starts when the trial ends, so they never lose free days).
+const CARD_FOR_TRIAL = process.env.CARD_FOR_TRIAL === "true";
 const Stripe = require("stripe");
-const { admin, json, readBody, guard } = require("../lib/shared");
+const { admin, json, readBody, guard, trialInfo } = require("../lib/shared");
+
+function keepFreeDays(sub) {
+  const data = { metadata: { user_id: (sub && sub.user_id) || "" } };
+  const t = trialInfo(sub);
+  if (!t.active || (sub && sub.had_trial)) return data;
+  const msLeft = t.ends.getTime() - Date.now();
+  // Stripe needs a trial end at least 48 hours away; otherwise round up to whole days (at most 1 extra day).
+  if (msLeft >= 48 * 3600000 + 60000) data.trial_end = Math.floor(t.ends.getTime() / 1000);
+  else data.trial_period_days = Math.max(1, Math.ceil(msLeft / 86400000));
+  return data;
+}
 
 exports.handler = async (event) => {
   const g = await guard(event); if (g.res) return g.res;
@@ -13,7 +28,11 @@ exports.handler = async (event) => {
   try {
     const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
     const db = admin();
-    const { data: sub } = await db.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle();
+    const { data: found } = await db.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle();
+    const sub = Object.assign({ user_id: user.id }, found || {});
+    if (!CARD_FOR_TRIAL && trialInfo(sub).active && !(sub.stripe_customer_id && ["active", "trialing", "past_due"].includes(sub.status))) {
+      return json(400, { error: "Enjoy your free trial! No card needed. You can choose a plan when it ends." });
+    }
 
     // Already subscribed: send them to the billing portal to switch plans instead
     if (sub && sub.stripe_customer_id && ["active", "trialing", "past_due"].includes(sub.status)) {
@@ -33,7 +52,7 @@ exports.handler = async (event) => {
       customer,
       line_items: [{ price, quantity: 1 }],
       payment_method_collection: "always",
-      subscription_data: { metadata: { user_id: user.id } },
+      subscription_data: CARD_FOR_TRIAL ? keepFreeDays(sub) : { metadata: { user_id: user.id } },
       allow_promotion_codes: true,
       success_url: process.env.APP_URL + "/#/today?upgraded=1",
       cancel_url: process.env.APP_URL + "/#/plans",

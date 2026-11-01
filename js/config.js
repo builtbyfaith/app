@@ -4,5 +4,7 @@
 window.BBF_CONFIG = {
   supabaseUrl: "",
   supabaseAnonKey: "",
-  siteUrl: "https://app.built-by-faith.com"
+  siteUrl: "https://app.built-by-faith.com",
+  // Set CARD_FOR_TRIAL=true in Netlify to let members choose a plan (with a card) during the trial.
+  cardForTrial: false
 };
