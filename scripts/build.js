@@ -16,8 +16,8 @@ for (const item of COPY) {
   fs.cpSync(src, path.join(out, item), { recursive: true });
 }
 
-const url = process.env.SUPABASE_URL || "";
-const anon = process.env.SUPABASE_ANON_KEY || "";
+const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 const site = process.env.APP_URL || "https://app.built-by-faith.com";
 const config = "/* Written at build time from Netlify environment variables. */\n" +
   "window.BBF_CONFIG = " + JSON.stringify({ supabaseUrl: url, supabaseAnonKey: anon, siteUrl: site }, null, 2) + ";\n";

@@ -36,7 +36,7 @@ With `js/config.js` left empty, the app runs in demo mode: everything works and 
 | `STRIPE_PRICE_COACH` | Stripe → AI Coach product → price ID |
 | `OPENAI_API_KEY` | OpenAI → API keys |
 | `OPENAI_MODEL` | Optional. Defaults to `gpt-4o-mini`; set to the smallest current "mini" model |
-| `COACH_DAILY_LIMIT` | Optional. Messages per member per day, default 30 |
+| `COACH_DAILY_LIMIT` | Optional. Messages per member per day, default 100 |
 | `APP_URL` | `https://app.built-by-faith.com` |
 
 5. Push to `builtbyfaith/app`, connect the repo in Netlify, and set the custom domain `app.built-by-faith.com`.

@@ -38,10 +38,18 @@
 
   // ---------- auth screens ----------
   function welcome() {
-    return page('<div class="top" style="min-height:300px;justify-content:flex-end">' + flower("#F0A99C", 46, "right:20px;top:" + (30) + "px") + flower("#9ED3CF", 28, "right:80px;top:110px;animation-delay:-1.5s") + flower("#E7DCA2", 34, "left:22px;top:60px;animation-delay:-.8s") +
-      '<span class="eyebrow">Built by Faith</span><h1 class="title" style="font-size:36px">Stronger in every season.</h1><p class="sub">Strength plans that adapt to you every week, with meals, progress and encouragement built in.</p></div>' +
-      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:auto"><a class="btn" href="#/setup/0">Find my program</a><p class="small muted center">Six quick questions. No account needed to start.</p><a class="btn soft" href="#/login">I already have an account</a></div>' +
-      word(E.dailyWord()), null, "no-nav");
+    const feats = [
+      ["\u{1F4AA}", "Plans that adapt", "Workouts that grow with you, even on low-energy days."],
+      ["\u{1F33F}", "Coach Faith", "A warm, faith-filled coach who helps you keep going."],
+      ["\u{1F957}", "Meals made simple", "Recipes, easy swaps and a grocery list that fit you."],
+      ["\u{1F4C8}", "See your progress", "Strength, steps and wins, all in one place."]
+    ];
+    return page('<div class="hero-card"><div class="hc-top">' + flower("#9ED3CF", 30, "right:18px;top:16px") +
+      '<span class="eyebrow">For every season of strong</span><h1 class="title">Meet Built by Faith</h1><p class="sub">Strength plans, meals and encouragement that fit your body, your schedule and your faith.</p></div>' +
+      '<div class="hc-body"><div class="hc-lead"><h2>Less guessing. More getting stronger.</h2><p>Answer a few quick questions and get a plan made for you. No account needed to start.</p></div>' +
+      '<div class="feat-grid">' + feats.map(f => '<div class="feat"><span class="feat-ic" aria-hidden="true">' + f[0] + '</span><h3>' + f[1] + '</h3><p>' + f[2] + '</p></div>').join("") + '</div>' +
+      '<a class="btn btn-glow" href="#/setup/0">Find my program</a></div></div>' +
+      '<p class="center muted small">Already have an account? <a class="link" href="#/login" style="padding:0">Sign in</a></p>', null, "no-nav");
   }
 
   function authForm(kind) {
@@ -49,7 +57,7 @@
     let [t, s] = titles[kind];
     if (kind === "signup" && loadPending()) { t = "Save your plan"; s = "Create your account to start your plan. It takes 30 seconds."; }
     let fields = "";
-    if (kind === "signup") fields += '<div class="field"><label for="nm">First name</label><input id="nm" autocomplete="given-name" required></div>';
+    if (kind === "signup") fields += '<div class="field"><label for="nm">First name</label><input id="nm" autocomplete="given-name" maxlength="40" required></div>';
     if (kind !== "new-password") fields += '<div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required></div>';
     if (kind !== "forgot") fields += '<div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="' + (kind === "login" ? "current-password" : "new-password") + '" minlength="8" required></div>';
     const btn = { signup: "Create account", login: "Sign in", forgot: "Send reset link", "new-password": "Save password" }[kind];
@@ -319,10 +327,11 @@
     d.coach.push({ role: "user", content: text });
     state.typing = true; render(); scrollChat();
     const plan = E.buildToday(p, d.workouts, {});
-    const context = { name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
+    const context = { name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
     try {
       const r = await S.coach(text, context);
       d.coach.push({ role: "assistant", content: r.reply });
+      if (r.offline && !state.offlineNoted) { state.offlineNoted = true; toast("Connection is weak, so your coach answered from saved encouragement."); }
     } catch (e) {
       d.coach.push({ role: "assistant", content: e.message || "I couldn't reply just now. Please try again in a moment." });
     }
@@ -388,6 +397,12 @@
     retryLoad() { state.data = null; render(); },
     async resendConfirm() { await act(async () => { await S.resendConfirm(state.pendingEmail); toast("Sent again. Check your inbox and spam folder."); }); },
     async resetDemo() { await S.deleteData(); state.user = null; state.data = null; state.setup = null; go("#/welcome"); },
+    startWith(el) {
+      const k = el.dataset.v; if (!C.PROGRAMS[k]) return;
+      state.setup = loadPending() || blankSetup();
+      state.setup.programs = [k].concat((state.setup.programs || []).filter(x => x !== k));
+      savePending(state.setup); go("#/setup/1");
+    },
     pick(el) {
       const [key, val, multi] = JSON.parse(el.dataset.v);
       const s = state.setup;
@@ -506,7 +521,7 @@
       const pw = val("pw"); if (pw.length < 8) return err("Use at least 8 characters.");
       await act(async () => { await S.setPassword(pw); toast("Password saved."); state.user = await S.user(); go("#/today"); });
     },
-    async steps() { const n = Math.max(0, parseInt(val("st"), 10) || 0); await act(async () => { await S.saveDaily(today(), { steps: n }); state.stepsOpen = false; await reload(); render(); }); },
+    async steps() { const n = Math.min(150000, Math.max(0, parseInt(val("st"), 10) || 0)); await act(async () => { await S.saveDaily(today(), { steps: n }); state.stepsOpen = false; await reload(); render(); }); },
     async weight() { const w = parseFloat(val("wt")); if (!w || w < 50 || w > 700) return toast("Enter your weight in pounds."); await act(async () => { await S.addBody(today(), w); state.weightOpen = false; await reload(); render(); }); },
     async coach() { const v = val("cm"); document.getElementById("cm").value = ""; await sendCoach(v); },
     async name() { await act(async () => { await S.saveProfile({ name: val("pn") }); await reload(); toast("Saved."); }); }

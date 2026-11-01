@@ -3,8 +3,10 @@ const Stripe = require("stripe");
 const { admin } = require("../lib/shared");
 
 exports.handler = async (event) => {
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Use POST." };
   const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-  const sig = event.headers["stripe-signature"];
+  const sig = event.headers["stripe-signature"] || event.headers["Stripe-Signature"];
+  if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) return { statusCode: 400, body: "Missing signature" };
   const raw = event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
   let evt;
   try { evt = stripe.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET); }

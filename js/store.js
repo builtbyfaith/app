@@ -16,9 +16,14 @@
   async function token() { const { data } = await sb.auth.getSession(); return data.session && data.session.access_token; }
   async function call(fn, body) {
     const t = await token();
-    const r = await fetch("/.netlify/functions/" + fn, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + t }, body: JSON.stringify(body || {}) });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);
+    let r;
+    try { r = await fetch("/.netlify/functions/" + fn, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json", Authorization: "Bearer " + t }, body: JSON.stringify(body || {}) }); }
+    catch (e) { const err = new Error("You seem to be offline. Please check your connection and try again."); err.network = true; throw err; }
+    finally { clearTimeout(timer); }
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || "Something went wrong. Please try again.");
+    if (!r.ok) { const err = new Error(j.error || "Something went wrong. Please try again."); err.status = r.status; throw err; }
     return j;
   }
   const must = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
@@ -113,7 +118,11 @@
         writeDemo(d);
         return { reply, demo: true };
       }
-      return call("coach", { message, context });
+      // No connection, or the AI is down: answer from the built-in backup coach instead.
+      const backup = () => ({ reply: window.BBF_DEMO_COACH(message, context), offline: true });
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return backup();
+      try { return await call("coach", { message, context }); }
+      catch (e) { if (e.network || e.status >= 500) return backup(); throw e; }
     },
 
     async startCheckout(plan) {

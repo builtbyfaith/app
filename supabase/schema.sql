@@ -94,3 +94,19 @@ create policy "own body" on public.body_logs for all using (auth.uid() = user_id
 -- Members can read their coach chat; only the server writes it (so daily limits can't be skipped)
 drop policy if exists "own coach read" on public.coach_messages;
 create policy "own coach read" on public.coach_messages for select using (auth.uid() = user_id);
+
+-- Size limits so no one can fill the database with junk (safe to run again).
+alter table public.profiles drop constraint if exists profiles_size;
+alter table public.profiles add constraint profiles_size check (
+  char_length(coalesce(name,'')) <= 60
+  and pg_column_size(setup) < 20000 and pg_column_size(settings) < 20000 and pg_column_size(progression) < 60000);
+alter table public.workout_logs drop constraint if exists workout_logs_size;
+alter table public.workout_logs add constraint workout_logs_size check (
+  pg_column_size(exercises) < 20000 and char_length(coalesce(name,'')) <= 120 and char_length(coalesce(program,'')) <= 120
+  and coalesce(minutes,0) between 0 and 600);
+alter table public.daily_logs drop constraint if exists daily_logs_size;
+alter table public.daily_logs add constraint daily_logs_size check (pg_column_size(meals) < 20000 and coalesce(steps,0) between 0 and 200000);
+alter table public.body_logs drop constraint if exists body_logs_size;
+alter table public.body_logs add constraint body_logs_size check (weight is null or weight between 40 and 1000);
+alter table public.coach_messages drop constraint if exists coach_messages_size;
+alter table public.coach_messages add constraint coach_messages_size check (char_length(content) <= 4000);
