@@ -52,6 +52,31 @@ create table if not exists public.coach_messages (
 );
 create index if not exists coach_messages_user_time on public.coach_messages(user_id, created_at);
 
+-- If tables already existed from an older app, add any missing columns (safe to run again).
+alter table public.profiles add column if not exists name text default '';
+alter table public.profiles add column if not exists setup jsonb;
+alter table public.profiles add column if not exists settings jsonb default '{}'::jsonb;
+alter table public.profiles add column if not exists progression jsonb default '{}'::jsonb;
+alter table public.profiles add column if not exists created_at timestamptz default now();
+alter table public.subscriptions add column if not exists plan text not null default 'none';
+alter table public.subscriptions add column if not exists status text;
+alter table public.subscriptions add column if not exists stripe_customer_id text;
+alter table public.subscriptions add column if not exists current_period_end timestamptz;
+alter table public.subscriptions add column if not exists had_trial boolean default false;
+alter table public.subscriptions add column if not exists trial_started_at timestamptz default now();
+
+-- Older columns this app doesn't use must not block new sign-ups.
+do $$
+declare c record;
+begin
+  for c in select table_name, column_name from information_schema.columns
+    where table_schema = 'public' and table_name in ('profiles','subscriptions') and is_nullable = 'NO' and column_default is null
+      and column_name not in ('id','user_id')
+  loop
+    execute format('alter table public.%I alter column %I drop not null', c.table_name, c.column_name);
+  end loop;
+end $$;
+
 -- New sign-ups get a profile and an empty subscription row automatically
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -110,3 +135,10 @@ alter table public.body_logs drop constraint if exists body_logs_size;
 alter table public.body_logs add constraint body_logs_size check (weight is null or weight between 40 and 1000);
 alter table public.coach_messages drop constraint if exists coach_messages_size;
 alter table public.coach_messages add constraint coach_messages_size check (char_length(content) <= 4000);
+
+-- Give anyone who signed up before this ran a profile and subscription row.
+insert into public.profiles (id, name) select id, coalesce(raw_user_meta_data->>'name','') from auth.users on conflict (id) do nothing;
+insert into public.subscriptions (user_id) select id from auth.users on conflict (user_id) do nothing;
+
+-- Tell the API about the new tables right away.
+notify pgrst, 'reload schema';

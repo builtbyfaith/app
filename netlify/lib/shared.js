@@ -2,9 +2,21 @@
 // and never reach the browser.
 const { createClient } = require("@supabase/supabase-js");
 
+const URL_ = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SERVICE = () => process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 let client = null;
 // One reused server client per function instance (faster and lighter under heavy traffic).
-const admin = () => client || (client = createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }));
+const admin = () => client || (client = createClient(URL_(), SERVICE(), { auth: { persistSession: false, autoRefreshToken: false } }));
+
+// Free trial: no card needed. Change these in Netlify environment variables if you like.
+const TRIAL_DAYS = parseInt(process.env.FREE_TRIAL_DAYS || "3", 10);
+const TRIAL_MESSAGES = parseInt(process.env.FREE_TRIAL_MESSAGES || "30", 10);
+function trialInfo(sub) {
+  const start = sub && sub.trial_started_at ? new Date(sub.trial_started_at) : null;
+  const ends = start ? new Date(start.getTime() + TRIAL_DAYS * 86400000) : null;
+  return { start, ends, active: !!(ends && Date.now() < ends.getTime()) };
+}
+const paid = (sub) => !!(sub && ["core", "coach"].includes(sub.plan) && ["active", "trialing", "past_due"].includes(sub.status));
 
 const json = (status, body) => ({
   statusCode: status,
@@ -40,10 +52,14 @@ async function requireUser(event) {
 // Common front door for member-only functions: POST only, from the app, signed in.
 async function guard(event) {
   if (event.httpMethod !== "POST") return { res: json(405, { error: "Use POST." }) };
+  if (!URL_() || !SERVICE()) {
+    console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables");
+    return { res: json(503, { error: "The app is still being set up. Please try again soon." }) };
+  }
   if (!sameOrigin(event)) return { res: json(403, { error: "Not allowed." }) };
   const user = await requireUser(event).catch(() => null);
   if (!user) return { res: json(401, { error: "Please sign in again." }) };
   return { user };
 }
 
-module.exports = { admin, json, readBody, requireUser, guard };
+module.exports = { admin, json, readBody, requireUser, guard, trialInfo, paid, TRIAL_DAYS, TRIAL_MESSAGES };

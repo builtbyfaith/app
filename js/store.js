@@ -28,17 +28,35 @@
   }
   const must = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
 
+  // Free trial chat: answered on this device from the saved replies (no AI cost).
+  const TKEY = id => "bbf_trial_chat_" + id;
+  let memTrial = {};
+  function trialChat(id) { try { return JSON.parse(localStorage.getItem(TKEY(id))) || memTrial[id] || []; } catch (e) { return memTrial[id] || []; } }
+  function saveTrialChat(id, list) { memTrial[id] = list; try { localStorage.setItem(TKEY(id), JSON.stringify(list.slice(-80))); } catch (e) {} }
+
   const Store = {
     live,
+
+    // used: how many trial messages were sent since the trial started (counted on this device)
+    async trialCoach(message, context, limit, since) {
+      const u = await this.user(); const id = (u && u.id) || "demo";
+      const list = trialChat(id);
+      const used = list.filter(m => m.role === "user" && (m.at || 0) >= (since || 0)).length;
+      if (used >= limit) return { reply: null, left: 0 };
+      const reply = window.BBF_DEMO_COACH(message, context), now = Date.now();
+      list.push({ role: "user", content: message, at: now }, { role: "assistant", content: reply, at: now });
+      saveTrialChat(id, list);
+      return { reply, left: Math.max(0, limit - used - 1) };
+    },
 
     async user() {
       if (!live) return readDemo().user;
       const { data } = await sb.auth.getSession();
-      return data.session ? { id: data.session.user.id, email: data.session.user.email } : null;
+      return data.session ? { id: data.session.user.id, email: data.session.user.email, created: data.session.user.created_at } : null;
     },
 
     async signUp(name, email, password) {
-      if (!live) { const d = readDemo(); d.user = { id: "demo", email, name }; d.profile = d.profile || { name, setup: null, settings: {}, progression: {} }; writeDemo(d); return { ok: true }; }
+      if (!live) { const d = readDemo(); d.user = { id: "demo", email, name }; d.trialStarted = d.trialStarted || new Date().toISOString(); d.profile = d.profile || { name, setup: null, settings: {}, progression: {} }; writeDemo(d); return { ok: true }; }
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { name }, emailRedirectTo: cfg.siteUrl || location.origin } });
       if (error) throw new Error(error.message);
       if (!data.session) return { needsConfirm: true };
@@ -69,7 +87,12 @@
     async signOut() { if (!live) { const d = readDemo(); d.user = null; writeDemo(d); return; } await sb.auth.signOut(); },
 
     async load() {
-      if (!live) { const d = readDemo(); return { profile: d.profile, plan: d.plan, status: d.status, workouts: d.workouts, daily: d.daily, body: d.body, coach: d.coach }; }
+      if (!live) {
+        const d = readDemo();
+        if (!d.trialStarted) { d.trialStarted = new Date().toISOString(); writeDemo(d); }
+        const paidCoach = d.plan === "coach";
+        return { profile: d.profile, plan: d.plan, status: d.status, trialStarted: d.trialStarted, workouts: d.workouts, daily: d.daily, body: d.body, coach: paidCoach ? d.coach : trialChat("demo") };
+      }
       const u = await this.user();
       const since = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
       const [p, s, w, dl, b, c] = await Promise.all([
@@ -83,7 +106,10 @@
       const daily = {}; (must(dl) || []).forEach(r => daily[r.date] = r);
       const prof = must(p) || { name: "", setup: null, settings: {}, progression: {} };
       const sub = must(s) || {};
-      return { profile: { name: prof.name || "", setup: prof.setup, settings: prof.settings || {}, progression: prof.progression || {} }, plan: sub.plan || "none", status: sub.status || null, workouts: must(w) || [], daily, body: must(b) || [], coach: must(c) || [] };
+      const plan = sub.plan || "none";
+      const paidCoach = plan === "coach" && ["active", "trialing", "past_due"].includes(sub.status);
+      return { profile: { name: prof.name || "", setup: prof.setup, settings: prof.settings || {}, progression: prof.progression || {} }, plan, status: sub.status || null,
+        trialStarted: sub.trial_started_at || u.created || new Date().toISOString(), workouts: must(w) || [], daily, body: must(b) || [], coach: paidCoach ? (must(c) || []) : trialChat(u.id) };
     },
 
     async saveProfile(patch) {

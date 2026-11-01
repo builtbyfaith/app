@@ -27,6 +27,52 @@
   const opt = (on, label, small, action, val) => '<button class="opt' + (on ? " on" : "") + '" data-a="' + action + '" data-v="' + esc(val) + '" aria-pressed="' + on + '">' + "<span>" + esc(label) + (small ? "<small>" + esc(small) + "</small>" : "") + '</span><span class="tk">' + I.check + "</span></button>";
 
   async function reload() { state.data = await S.load(); }
+  // ---- memberships ----
+  // Edit prices and the "what's included" lists here. Stripe prices must match.
+  const TRIAL_DAYS = 3, TRIAL_MSGS = 30, FREE_WORKOUTS = 2, FREE_MSGS_DAY = 5;
+  const PLAN_INFO = {
+    free: { name: "Free", price: "$0", per: "forever", items: [
+      "Your personal plan from the quiz, for any program",
+      FREE_WORKOUTS + " guided workouts a week with exercise diagrams",
+      "Low-energy workouts and rest timer",
+      "Today's meal ideas and recipes",
+      "Step tracking, weigh-ins and workout history",
+      "Daily verse and encouragement",
+      "Coach Faith saved replies, " + FREE_MSGS_DAY + " a day"] },
+    core: { name: "Core", price: "$4.99", per: "/month", items: [
+      "Everything in Free",
+      "Your full weekly schedule, every workout day",
+      "Workouts that add weight and reps as you get stronger",
+      "Meal swaps and your weekly grocery list",
+      "Strength charts for every lift",
+      "Unlimited Coach Faith saved replies"] },
+    coach: { name: "AI Coach", price: "$9.99", per: "/month", items: [
+      "Everything in Core",
+      "Coach Faith AI: real answers about your plan, up to 100 messages a day",
+      "Help with swaps, tired days, meals and motivation, any time"] }
+  };
+  const isPaid = () => ["core", "coach"].includes(state.data.plan);
+  const hasCoach = () => state.data.plan === "coach";
+  const dayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  function trial() {
+    const start = new Date(state.data.trialStarted || Date.now()).getTime(), ends = start + TRIAL_DAYS * 86400000;
+    const msLeft = ends - Date.now();
+    return { start, active: msLeft > 0, daysLeft: Math.max(1, Math.ceil(msLeft / 86400000)) };
+  }
+  // coach | core | trial | free
+  function tier() { if (hasCoach()) return "coach"; if (isPaid()) return "core"; return trial().active ? "trial" : "free"; }
+  const full = () => tier() !== "free";
+  // Saved-reply coach allowance for members without the AI coach
+  function savedAllowance() {
+    const t = tier(), msgs = (state.data.coach || []).filter(m => m.role === "user");
+    const at = m => m.at || trial().start;
+    if (t === "trial") return { limit: TRIAL_MSGS, since: trial().start, left: Math.max(0, TRIAL_MSGS - msgs.filter(m => at(m) >= trial().start).length), label: "Free trial" };
+    if (t === "free") return { limit: FREE_MSGS_DAY, since: dayStart(), left: Math.max(0, FREE_MSGS_DAY - msgs.filter(m => at(m) >= dayStart()).length), label: "Today" };
+    return { limit: 100000, since: 0, left: null, label: "" };
+  }
+  const hasAccess = () => true;
+  const lock = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg>';
+  const upsell = (title, text) => '<div class="card upsell"><span class="label" style="display:flex;align-items:center;gap:6px;color:var(--coral)">' + lock + ' Core feature</span><h3>' + title + '</h3><p class="small">' + text + '</p><a class="btn" href="#/plans">See plans from ' + PLAN_INFO.core.price + '/month</a></div>';
   let memPending = null;
   const PKEY = "bbf_pending_setup";
   function loadPending() { try { const v = localStorage.getItem(PKEY); return v ? JSON.parse(v) : memPending; } catch (e) { return memPending; } }
@@ -124,10 +170,23 @@
 
   // ---------- plans (paywall) ----------
   function plans() {
-    return page('<div class="top">' + flower("#F0A99C", 34, "right:18px;top:24px") + '<span class="eyebrow">Your plan is ready</span><h1 class="title">Start your 7-day free trial</h1><p class="sub">Cancel any time before the trial ends and you won\'t be charged.</p></div>' +
-      '<div class="card"><span class="label">Core</span><h3>$7.99<span class="muted small"> /month</span></h3><ul class="list small"><li>Workouts that adapt every week</li><li>Meal plans, swaps and grocery list</li><li>Progress and step tracking</li></ul><button class="btn soft" data-a="checkout" data-v="core">Try Core free</button></div>' +
-      '<div class="card hl"><span class="label" style="color:var(--coral)">Most encouraging</span><h3>Train with an AI coach <span class="muted small">$14.99/month</span></h3><ul class="list small"><li>Everything in Core</li><li>A coach to talk to any time, who knows your plan</li><li>Encouragement on hard days, so you don\'t give up</li></ul><button class="btn" data-a="checkout" data-v="coach">Try the AI coach free</button></div>' +
-      '<button class="link center" data-a="refresh">I already subscribed</button><button class="link center" data-a="signOut">Sign out</button>', null, "no-nav");
+    const t = tier(), tr = trial();
+    const head = t === "trial"
+      ? '<span class="eyebrow">Free trial · ' + tr.daysLeft + (tr.daysLeft === 1 ? " day" : " days") + ' left</span><h1 class="title">Choose what fits you</h1><p class="sub">You\'re trying everything right now. After your trial you keep the Free plan, or pick Core or AI Coach any time.</p>'
+      : t === "free" ? '<span class="eyebrow">Your plan: Free</span><h1 class="title">Grow a little stronger</h1><p class="sub">Your Free plan stays free. Upgrade any time for your full schedule, meals and more.</p>'
+      : '<span class="eyebrow">Your membership</span><h1 class="title">Your plan</h1><p class="sub">Switch plans or manage billing any time.</p>';
+    const ck = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5l4 4 8-9"/></svg>';
+    const card = (k, hl, btn) => { const i = PLAN_INFO[k], cur = (t === k) || (k === "free" && t === "free");
+      return '<div class="card plan' + (hl ? " hl" : "") + '">' + (hl ? '<span class="label" style="color:var(--coral)">Most encouraging</span>' : "") +
+        '<div class="ex"><h3>' + i.name + '</h3>' + (cur ? '<span class="chip">Your plan</span>' : "") + '</div><p class="plan-price">' + i.price + '<span> ' + i.per + '</span></p>' +
+        '<ul class="plan-list">' + i.items.map(x => "<li>" + ck + "<span>" + esc(x) + "</span></li>").join("") + "</ul>" + (cur ? "" : btn) + "</div>"; };
+    return page('<div class="top">' + flower("#F0A99C", 34, "right:18px;top:24px") + head + '</div>' +
+      card("coach", true, '<button class="btn" data-a="checkout" data-v="coach">Choose AI Coach</button>') +
+      card("core", false, '<button class="btn soft" data-a="checkout" data-v="core">Choose Core</button>') +
+      card("free", false, "") +
+      (isPaid() ? '<button class="btn soft" data-a="portal">Manage or cancel</button>' : '<p class="small muted center">Cancel any time from your profile. No card needed for Free.</p>') +
+      '<a class="btn mint" href="#/today">Back to today</a>' +
+      (!isPaid() ? '<button class="link center" data-a="refresh">I already subscribed</button>' : ""), null, "no-nav");
   }
 
   // ---------- today ----------
@@ -147,7 +206,10 @@
     const raceW = E.raceWeeks(p.setup);
 
     let workoutCard;
-    if (doneToday) {
+    const capped = !full() && plan.doneWeek >= FREE_WORKOUTS;
+    if (capped && !doneToday) {
+      workoutCard = '<div class="card" style="background:var(--butter-soft);border-color:transparent"><span class="label">This week</span><h3>You did your ' + FREE_WORKOUTS + ' free workouts. Well done!</h3><p class="small">Take a walk or stretch today. Your next free workouts open on Monday, or unlock your full weekly schedule with Core.</p><a class="btn" href="#/plans">See plans from ' + PLAN_INFO.core.price + '/month</a><button class="btn soft" data-a="stepsOpen">Log a walk</button></div>';
+    } else if (doneToday) {
       workoutCard = '<div class="card" style="background:var(--mint-soft);border-color:transparent"><span class="label">Today</span><h3>Workout done. Well done' + (firstName() ? ", " + esc(firstName()) : "") + '.</h3><p class="small">' + esc(E.affirmation("done")) + '</p><a class="btn soft" href="#/progress">See your progress</a></div>';
     } else {
       const lines = plan.run ? '<p class="small">' + esc(plan.run.detail) + "</p>" : plan.exercises.map(x => '<div class="ex"><span>' + esc(x.name) + "</span><b>" + x.sets + " × " + (x.kind === "time" ? x.secs + " s" : x.reps) + "</b></div>").join("");
@@ -161,10 +223,12 @@
     return page('<div class="top">' + flower("#F0A99C", 34, "right:16px;top:80px") +
       '<div class="row"><span class="eyebrow">' + new Date().toLocaleDateString(undefined, { weekday: "long" }) + " · " + esc(C.PROGRAMS[E.mainProgram(p.setup)].name) + '</span><a class="icon-btn" href="#/profile" aria-label="Profile and settings">' + I.user + "</a></div>" +
       '<h1 class="title">' + greet + (firstName() ? ", " + esc(firstName()) : "") + ".</h1>" + word(E.dailyWord()) +
+      (tier() === "trial" ? '<a class="trial-pill" href="#/plans"><span>Free trial · ' + trial().daysLeft + (trial().daysLeft === 1 ? " day" : " days") + ' left</span><b>See plans</b></a>'
+        : tier() === "free" ? '<a class="trial-pill" href="#/plans"><span>Free plan · ' + Math.max(0, FREE_WORKOUTS - plan.doneWeek) + ' of ' + FREE_WORKOUTS + ' workouts left this week</span><b>Upgrade</b></a>' : "") +
       '<div class="rings">' + ring(plan.doneWeek / plan.target * 100, "#C4553E", "This week", plan.doneWeek + "/" + plan.target) + ring(steps / stepGoal * 100, "#3E9E96", "Steps", steps >= 1000 ? (steps / 1000).toFixed(1) + "k" : String(steps), "stepsToggle") + ring(ate / Math.max(1, meals.length) * 100, "#A8892A", "Meals", ate + "/" + meals.length) + "</div>" +
       (state.stepsOpen ? '<form data-f="steps" style="display:flex;gap:8px"><label class="sr" for="st" style="position:absolute;left:-9999px">Steps today</label><input id="st" type="number" inputmode="numeric" min="0" placeholder="Steps today" value="' + (steps || "") + '" style="flex:1;min-height:44px;border-radius:999px;border:1.5px solid var(--line);padding:0 14px"><button class="btn small" type="submit">Save</button></form>' : "") +
       "</div>" +
-      (away !== null && away >= 5 && !doneToday ? '<div class="card" style="background:var(--butter-soft);border-color:transparent"><h3>' + esc(E.affirmation("back")) + '</h3><p class="small">It\'s been ' + away + ' days. Let\'s ease back in with a gentle session.</p><button class="btn soft" data-a="energy" data-v="low">Start gently</button></div>' : "") +
+      (away !== null && away >= 5 && !doneToday && !capped ? '<div class="card" style="background:var(--butter-soft);border-color:transparent"><h3>' + esc(E.affirmation("back")) + '</h3><p class="small">It\'s been ' + away + ' days. Let\'s ease back in with a gentle session.</p><button class="btn soft" data-a="energy" data-v="low">Start gently</button></div>' : "") +
       (raceW !== null && raceW >= 0 ? '<div class="card" style="background:var(--sky-soft);border-color:transparent"><span class="label">Race countdown</span><h3>' + (raceW === 0 ? "Race week. Trust your training." : raceW + " week" + (raceW === 1 ? "" : "s") + " to race day") + "</h3></div>" : "") +
       workoutCard +
       (nextMeal ? '<a class="card" href="#/eat" style="text-decoration:none;color:inherit;flex-direction:row;align-items:center"><span style="flex:1"><span class="label">Next meal</span><br><b>' + esc(nextMeal.recipe.name) + '</b><br><span class="small muted">' + nextMeal.recipe.protein + " g protein · " + nextMeal.recipe.minutes + " min</span></span>" + I.back.replace('d="M12.5 4l-6 6 6 6"', 'd="M7.5 4l6 6-6 6"') + "</a>" : "") +
@@ -174,6 +238,7 @@
   // ---------- workout player ----------
   function startWorkout() {
     const plan = E.buildToday(state.data.profile, state.data.workouts, { energy: state.energy });
+    if (!full() && plan.doneWeek >= FREE_WORKOUTS) { go("#/plans"); return; }
     plan.exercises.forEach(x => { x.done = Array(x.sets).fill(false); x.weightUsed = x.weight; x.repsUsed = x.reps; });
     state.session = { plan, started: Date.now(), energy: state.energy || "ok" };
     go("#/workout");
@@ -219,13 +284,13 @@
     const log = { date: today(), name: p.name, program: p.program, energy: s.energy, effort, minutes: p.run ? p.minutes : minutes,
       exercises: p.run ? [{ name: p.run.name, kind: "run", minutes: p.minutes }] : p.exercises.map(x => ({ name: x.name, kind: x.kind, sets: x.sets, weight: x.weightUsed, reps: x.repsUsed, secs: x.secs, done: x.done })) };
     await S.saveWorkout(log);
-    if (!p.run) {
+    if (!p.run && full()) {
       const progression = E.progress(prof.progression || {}, p.exercises, effort);
       await S.saveProfile({ progression });
     }
     state.session = null; state.energy = null; stopTimer();
     await reload();
-    toast(effort === "hard" ? "Saved. We'll keep it steady next time." : "Saved. Your plan just got a little stronger.");
+    toast(!full() ? "Saved. Well done! Core adds weight for you as you get stronger." : effort === "hard" ? "Saved. We'll keep it steady next time." : "Saved. Your plan just got a little stronger.");
     go("#/today");
   }
 
@@ -247,8 +312,8 @@
     const slotName = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
     const tags = [p.setup.diet].concat((p.setup.allergies || []).filter(a => a !== "none").map(a => "No " + a));
     return page('<div class="top">' + flower("#E7DCA2", 32, "right:18px;top:24px") + '<span class="eyebrow">' + esc(E.affirmation("eat")) + '</span><h1 class="title">Today\'s meals</h1><div class="chips">' + tags.map(t => '<span class="chip" style="background:#fff">' + esc(t) + "</span>").join("") + "</div></div>" +
-      meals.map(m => '<div class="card' + (m.status === "ate" ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><span class="label">' + slotName[m.slot] + "</span>" + (m.status === "ate" ? '<b class="small" style="color:var(--sage)">Eaten</b>' : "") + "</div><h3>" + esc(m.recipe.name) + '</h3><span class="small muted">' + m.recipe.protein + " g protein · " + m.recipe.minutes + ' min</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><a class="btn small" style="width:100%" href="#/recipe/' + m.recipe.id + '">Cook</a><button class="btn small soft" style="width:100%" data-a="swap" data-v="' + m.slot + '"' + (m.options < 2 ? " disabled" : "") + '>Swap</button><button class="btn small soft" style="width:100%" data-a="ate" data-v="' + m.slot + '" aria-pressed="' + (m.status === "ate") + '">' + (m.status === "ate" ? "Undo" : "Ate it") + "</button></div></div>").join("") +
-      '<a class="btn mint" href="#/grocery">This week\'s grocery list</a><p class="small muted center">Change your diet or allergies anytime in your profile.</p>', "eat");
+      meals.map(m => '<div class="card' + (m.status === "ate" ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><span class="label">' + slotName[m.slot] + "</span>" + (m.status === "ate" ? '<b class="small" style="color:var(--sage)">Eaten</b>' : "") + "</div><h3>" + esc(m.recipe.name) + '</h3><span class="small muted">' + m.recipe.protein + " g protein · " + m.recipe.minutes + ' min</span><div class="opts grid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><a class="btn small" style="width:100%" href="#/recipe/' + m.recipe.id + '">Cook</a>' + (full() ? '<button class="btn small soft" style="width:100%" data-a="swap" data-v="' + m.slot + '"' + (m.options < 2 ? " disabled" : "") + '>Swap</button>' : '<a class="btn small soft" style="width:100%;gap:4px" href="#/plans" aria-label="Swap meals with Core">' + lock + 'Swap</a>') + '<button class="btn small soft" style="width:100%" data-a="ate" data-v="' + m.slot + '" aria-pressed="' + (m.status === "ate") + '">' + (m.status === "ate" ? "Undo" : "Ate it") + "</button></div></div>").join("") +
+      (full() ? '<a class="btn mint" href="#/grocery">This week\'s grocery list</a>' : upsell("Your weekly grocery list", "Get every ingredient for the week in one list, plus meal swaps that fit how you eat.")) + '<p class="small muted center">Change your diet or allergies anytime in your profile.</p>', "eat");
   }
 
   function recipeScreen(id) {
@@ -261,6 +326,7 @@
   }
 
   function groceryScreen() {
+    if (!full()) { go("#/plans"); return ""; }
     const items = E.groceryList(state.data.profile.setup);
     let got = {}; try { got = JSON.parse(localStorage.getItem("bbf_grocery_" + E.weekStart()) || "{}"); } catch (e) {}
     return page('<a class="icon-btn" href="#/eat" aria-label="Back to meals" style="background:var(--card)">' + I.back + '</a><h1 class="title">Grocery list</h1><p class="sub">Everything for the next 7 days of meals. Tap to check off.</p>' +
@@ -300,7 +366,7 @@
     const recent = d.workouts.slice(-5).reverse();
     return page('<div class="top">' + flower("#9ED3CF", 34, "right:18px;top:24px") + '<span class="eyebrow">' + (total ? total + " workout" + (total === 1 ? "" : "s") + " so far" : "Your journey starts here") + '</span><h1 class="title">' + (total ? "You're growing stronger." : "Every journey starts with one step.") + "</h1>" +
       '<div class="stats"><div class="stat"><b>' + total + '</b><small>workouts</small></div><div class="stat"><b>' + weeks + '</b><small>weeks on track</small></div><div class="stat" style="background:var(--coral);color:#fff"><b>' + (gain > 0 ? "+" + gain : gain || 0) + '</b><small style="color:#fff">lb ' + esc(lift ? "on " + lift.split(" ").slice(-1)[0].toLowerCase() : "gained") + "</small></div></div></div>" +
-      liftCard + bodyCard +
+      (full() ? liftCard : upsell("Strength charts", "See every lift climb week by week. Core also adds weight and reps for you as you get stronger.")) + bodyCard +
       (recent.length ? '<div class="card"><span class="label">Recent workouts</span><ul class="list small">' + recent.map(w => "<li><span style=\"flex:1\"><b>" + esc(w.name) + "</b><br><span class=\"muted\">" + E.parseDate(w.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " + w.minutes + " min</span></span><span class=\"chip\">" + ({ easy: "Easy", right: "Just right", hard: "Tough" }[w.effort] || "") + "</span></li>").join("") + "</ul></div>" : "") +
       '<p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">Faithful in little, growing in much.</p>', "progress");
   }
@@ -308,27 +374,32 @@
   // ---------- coach ----------
   function coachScreen() {
     const d = state.data;
-    if (d.plan !== "coach") {
-      return page('<div class="top">' + flower("#F0A99C", 34, "right:18px;top:24px") + '<span class="eyebrow">AI coach</span><h1 class="title">A coach in your corner, any time.</h1><p class="sub">Talk through tired days, swap exercises, ask about meals, and get encouragement that keeps you going.</p></div>' +
-        '<div class="card hl"><h3>Train with an AI coach</h3><p class="small">$14.99/month, 7-day free trial. Everything in Core plus your coach.</p><button class="btn" data-a="checkout" data-v="coach">Try the AI coach free</button></div>' +
-        '<div class="card"><span class="label">What it sounds like</span><div class="msg ai">Tired days are real. Let\'s do the gentle version today and keep your streak. Rest is part of strength.</div></div>', "coach");
-    }
+    const al = savedAllowance(), saved = !hasCoach();
+    const out = saved && al.left !== null && al.left <= 0;
+    const trialBar = saved ? '<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>' + (al.left === null ? "<b>Coach Faith:</b> saved replies" : "<b>" + al.label + ":</b> " + al.left + " of " + al.limit + " messages left") + '</span><a class="link" href="#/plans" style="padding:0">Get AI Coach</a></div>' : "";
     const msgs = d.coach.length ? d.coach : [{ role: "assistant", content: "Hi" + (firstName() ? " " + firstName() : "") + "! I'm your Built by Faith coach. I know your plan and I'm here to help you keep going, especially on the hard days. What's on your mind?" }];
-    return page('<div class="top" style="padding-bottom:16px">' + flower("#9ED3CF", 28, "right:18px;top:24px") + '<span class="eyebrow">Your coach</span><h1 class="title" style="font-size:24px">Here for you, every step.</h1></div>' +
+    return page('<div class="top" style="padding-bottom:16px">' + flower("#9ED3CF", 28, "right:18px;top:24px") + '<span class="eyebrow">Your coach</span><h1 class="title" style="font-size:24px">Here for you, every step.</h1></div>' + trialBar +
       '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
       (d.coach.length < 2 ? '<div class="starters">' + ["I'm tired today", "I fell off track", "Swap an exercise", "What should I eat?", "I need encouragement"].map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
+      (out ? '<div class="card hl"><h3>' + (tier() === "free" ? "That\'s today\'s messages" : "You\'ve used your free messages") + '</h3><p class="small">I\'ve loved cheering you on! ' + (tier() === "free" ? "I\'ll be back tomorrow, or c" : "C") + 'hoose AI Coach to talk with me any time, up to 100 messages a day.</p><a class="btn" href="#/plans">See plans</a></div>' : "") +
       '<p class="small muted center" style="margin-bottom:70px">Your coach gives fitness encouragement, not medical advice.</p>' +
-      '<form class="composer" data-f="coach"><label for="cm" style="position:absolute;left:-9999px">Message your coach</label><input id="cm" autocomplete="off" placeholder="Message your coach" maxlength="600"><button class="btn small" type="submit">Send</button></form>', "coach");
+      (out ? "" : '<form class="composer" data-f="coach"><label for="cm" style="position:absolute;left:-9999px">Message your coach</label><input id="cm" autocomplete="off" placeholder="Message your coach" maxlength="600"><button class="btn small" type="submit">Send</button></form>'), "coach");
   }
 
   async function sendCoach(text) {
     text = (text || "").trim(); if (!text) return;
     const d = state.data, p = d.profile;
-    d.coach.push({ role: "user", content: text });
+    d.coach.push({ role: "user", content: text, at: Date.now() });
     state.typing = true; render(); scrollChat();
     const plan = E.buildToday(p, d.workouts, {});
     const context = { name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
     try {
+      if (!hasCoach()) {
+        const al = savedAllowance();
+        const r = await S.trialCoach(text, context, al.limit, al.since);
+        if (r.reply) d.coach.push({ role: "assistant", content: r.reply }); else d.coach.pop();
+        state.typing = false; render(); scrollChat(); return;
+      }
       const r = await S.coach(text, context);
       d.coach.push({ role: "assistant", content: r.reply });
       if (r.offline && !state.offlineNoted) { state.offlineNoted = true; toast("Connection is weak, so your coach answered from saved encouragement."); }
@@ -342,11 +413,11 @@
   // ---------- profile ----------
   function profileScreen() {
     const d = state.data, p = d.profile, s = p.setup;
-    const planName = { core: "Core", coach: "AI coach" }[d.plan] || "No plan";
+    const planName = { coach: "AI Coach", core: "Core", trial: "Free trial · " + trial().daysLeft + (trial().daysLeft === 1 ? " day" : " days") + " left", free: "Free" }[tier()];
     return page('<a class="icon-btn" href="#/today" aria-label="Back to today" style="background:var(--card)">' + I.back + '</a><h1 class="title">Your profile</h1>' +
       '<form data-f="name" class="card"><div class="field"><label for="pn">First name</label><input id="pn" value="' + esc(p.name) + '"></div><button class="btn soft small" type="submit">Save name</button></form>' +
       '<div class="card"><span class="label">Your plan</span><p><b>' + esc((s.programs || []).map(k => C.PROGRAMS[k].name).join(" + ")) + '</b></p><p class="small muted">' + s.days + " days a week · " + s.minutes + " min · " + esc(s.diet) + '</p><button class="btn soft small" data-a="redoSetup">Change my answers</button></div>' +
-      '<div class="card"><span class="label">Membership</span><p><b>' + planName + "</b>" + (d.status === "trialing" ? " · free trial" : "") + "</p>" + (d.plan === "core" ? '<button class="btn small" data-a="checkout" data-v="coach">Add the AI coach</button>' : "") + (d.plan !== "none" ? '<button class="btn soft small" data-a="portal">Manage or cancel</button>' : '<a class="btn small" href="#/plans">Choose a plan</a>') + "</div>" +
+      '<div class="card"><span class="label">Membership</span><p><b>' + planName + "</b>" + "" + "</p>" + (d.plan === "core" ? '<button class="btn small" data-a="checkout" data-v="coach">Add the AI coach</button>' : "") + (d.plan !== "none" ? '<button class="btn soft small" data-a="portal">Manage or cancel</button>' : '<a class="btn small" href="#/plans">Choose a plan</a>') + "</div>" +
       '<div class="card"><span class="label">Preferences</span><button class="opt' + (s && p.settings && p.settings.hideWeight ? " on" : "") + '" data-a="toggleWeight" aria-pressed="' + !!(p.settings && p.settings.hideWeight) + '"><span>Hide body weight<small>Focus on strength and consistency</small></span><span class="tk">' + I.check + "</span></button></div>" +
       '<button class="btn soft" data-a="signOut">Sign out</button>' +
       (state.confirmDelete ? '<div class="card" style="border-color:var(--coral)"><p><b>Delete all your data?</b></p><p class="small">This removes your workouts, meals, progress and coach messages. It can\'t be undone.' + (d.plan !== "none" ? " Cancel your membership first under Manage or cancel." : "") + '</p><div class="confirm"><button class="btn soft small" data-a="cancelDelete">Keep my data</button><button class="btn small" data-a="deleteData">Delete everything</button></div></div>' : '<button class="link center" data-a="askDelete">Delete my data</button>') +
@@ -385,7 +456,7 @@
       root.innerHTML = setupScreen(+a || 0); return;
     }
     if (route === "setup") { if (!state.setup) state.setup = JSON.parse(JSON.stringify(p.setup)); root.innerHTML = setupScreen(+a || 0); return; }
-    if (state.data.plan === "none" && route !== "plans" && route !== "profile") return go("#/plans");
+    if (!hasAccess() && route !== "plans" && route !== "profile") return go("#/plans");
     const screens = { today: todayScreen, plans, workout: workoutScreen, finish: finishScreen, eat: eatScreen, grocery: groceryScreen, progress: progressScreen, coach: coachScreen, profile: profileScreen };
     if (route === "recipe") { root.innerHTML = recipeScreen(a); return; }
     root.innerHTML = (screens[route] || todayScreen)();
@@ -438,16 +509,16 @@
         await S.saveProfile({ setup: s });
         state.setup = null; await reload();
         toast("Your plan is ready.");
-        go(state.data.plan === "none" ? "#/plans" : "#/today");
+        go(hasAccess() ? "#/today" : "#/plans");
       });
     },
     async checkout(el) {
       await act(async () => {
         const r = await S.startCheckout(el.dataset.v);
-        if (r && r.demo) { await reload(); toast("Free trial started (demo)."); go(el.dataset.v === "coach" ? "#/coach" : "#/today"); }
+        if (r && r.demo) { await reload(); toast("Membership started (demo)."); go(el.dataset.v === "coach" ? "#/coach" : "#/today"); }
       });
     },
-    async refresh() { await act(async () => { await reload(); if (state.data.plan === "none") toast("No membership found yet. It can take a minute after checkout."); else go("#/today"); }); },
+    async refresh() { await act(async () => { await reload(); if (!isPaid()) toast("No membership found yet. It can take a minute after checkout."); else go("#/today"); }); },
     async portal() { await act(async () => { const r = await S.openPortal(); if (r && r.demo) toast("In the live app this opens Stripe to manage or cancel."); }); },
     async signOut() { await S.signOut(); state.user = null; state.data = null; go("#/welcome"); },
     energy(el) { state.energy = el.dataset.v; render(); },

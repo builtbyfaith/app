@@ -16,14 +16,14 @@ With `js/config.js` left empty, the app runs in demo mode: everything works and 
 | `js/demo-coach.js` | Offline coach used in demo mode |
 | `netlify/functions/coach.js` | The AI coach (OpenAI), with plan check and daily limit |
 | `netlify/lib/coach-personality.js` | The coach's personality and safety rules (edit the wording here) |
-| `netlify/functions/create-checkout.js`, `stripe-webhook.js`, `customer-portal.js` | Stripe subscriptions with a 7-day free trial |
+| `netlify/functions/create-checkout.js`, `stripe-webhook.js`, `customer-portal.js` | Stripe subscriptions (the 3-day free trial happens in the app, no card) |
 | `netlify/functions/delete-account.js` | Lets members delete their account and data |
 | `supabase/schema.sql` | Database tables and security rules |
 
 ## Go live
 1. **Supabase:** SQL Editor → paste `supabase/schema.sql` → Run. Authentication → URL Configuration: Site URL `https://app.built-by-faith.com`, and add it to Redirect URLs.
 2. **config.js:** paste the Project URL and anon public key from Project Settings → API.
-3. **Stripe:** create two monthly prices (Core $7.99, AI Coach $14.99). Add a webhook to `https://app.built-by-faith.com/.netlify/functions/stripe-webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Turn on the Customer portal.
+3. **Stripe:** create two monthly prices (Core $4.99, AI Coach $9.99). Add a webhook to `https://app.built-by-faith.com/.netlify/functions/stripe-webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Turn on the Customer portal.
 4. **Netlify environment variables** (Site configuration → Environment variables):
 
 | Name | Where to find it |

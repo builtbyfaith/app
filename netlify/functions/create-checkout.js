@@ -1,4 +1,4 @@
-// Starts a Stripe Checkout for Core or AI coach with a 7-day free trial (card required, one trial per member).
+// Starts a Stripe Checkout for Core or AI coach. The free trial happens in the app first (no card), so billing starts right away.
 const Stripe = require("stripe");
 const { admin, json, readBody, guard } = require("../lib/shared");
 
@@ -28,13 +28,12 @@ exports.handler = async (event) => {
       await db.from("subscriptions").upsert({ user_id: user.id, stripe_customer_id: customer }, { onConflict: "user_id" });
     }
 
-    const hadTrial = sub && sub.had_trial;
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
       line_items: [{ price, quantity: 1 }],
       payment_method_collection: "always",
-      subscription_data: Object.assign({ metadata: { user_id: user.id } }, hadTrial ? {} : { trial_period_days: 7 }),
+      subscription_data: { metadata: { user_id: user.id } },
       allow_promotion_codes: true,
       success_url: process.env.APP_URL + "/#/today?upgraded=1",
       cancel_url: process.env.APP_URL + "/#/plans",

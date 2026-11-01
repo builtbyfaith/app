@@ -28,19 +28,21 @@ exports.handler = async (event) => {
 
   const db = admin();
   const { data: sub } = await db.from("subscriptions").select("plan,status").eq("user_id", user.id).maybeSingle();
-  if (!sub || sub.plan !== "coach" || !["active", "trialing"].includes(sub.status)) {
-    return json(403, { error: "The AI coach is part of the AI coach plan. You can start a free trial from the Coach tab." });
-  }
+  const coachPlan = sub && sub.plan === "coach" && ["active", "trialing", "past_due"].includes(sub.status);
+  // Free-trial members use the app's built-in saved replies, so only paid AI coach members reach OpenAI.
+  if (!coachPlan) return json(403, { error: "The AI coach is part of the AI coach plan. You can add it from the Coach tab." });
 
   // Save the message first, then count, so sending many at once can't slip past the limit.
   const { data: saved, error: saveErr } = await db.from("coach_messages").insert({ user_id: user.id, role: "user", content: message }).select("id").single();
   if (saveErr) return json(500, { error: "Your coach couldn't reply just now. Please try again in a minute." });
   const since = new Date(); since.setUTCHours(0, 0, 0, 0);
+  const limit = DAILY_LIMIT;
+  const limitMsg = "You've reached today's coach messages. I'll be here tomorrow, and your plan is ready for you today. You've got this.";
   const { count } = await db.from("coach_messages").select("id", { count: "exact", head: true })
     .eq("user_id", user.id).eq("role", "user").gte("created_at", since.toISOString());
-  if ((count || 0) > DAILY_LIMIT) {
+  if ((count || 0) > limit) {
     await db.from("coach_messages").delete().eq("id", saved.id);
-    return json(429, { error: "You've reached today's coach messages. I'll be here tomorrow, and your plan is ready for you today. You've got this." });
+    return json(429, { error: limitMsg });
   }
 
   // Last few messages for context (not including the one just saved)
