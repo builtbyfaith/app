@@ -97,7 +97,7 @@
     return page('<div class="top">' +
       '<div class="row"><button class="icon-btn" data-a="setupBack" aria-label="Back">' + I.back + '</button><span class="chip" style="background:#fff">Step ' + (n + 1) + " of " + steps.length + '</span>' + bloom(n, steps.length) + '</div><div class="progress"><i style="width:' + pct + '%"></i></div>' +
       '<span class="eyebrow">' + st.eb + '</span><h1 class="title">' + st.q + '</h1><p class="sub">' + st.hint + "</p></div>" + body +
-      '<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px"><p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">' + esc(E.affirmation("start", n)) + '</p><button class="btn" data-a="setupNext" ' + (ready ? "" : "disabled") + ">" + (last ? "Build my plan" : "Continue") + "</button></div>", null, "no-nav");
+      '<div class="setup-foot"><p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">' + esc(E.affirmation("start", n)) + '</p><button class="btn" data-a="setupNext" ' + (ready ? "" : "disabled") + ">" + (last ? "Build my plan" : "Continue") + "</button></div>", null, "no-nav");
   }
 
   // ---------- quiz result (before an account) ----------
@@ -195,7 +195,7 @@
             x.kind === "time" ? '<span class="small" style="grid-column:span 2">' + x.secs + " seconds</span>" :
               '<label style="position:absolute;left:-9999px" for="r' + i + "_" + j + '">Reps</label><input id="r' + i + "_" + j + '" type="number" inputmode="numeric" data-in="reps" data-i="' + i + '" value="' + x.repsUsed + '" aria-label="Reps"><span class="small muted">reps</span>') +
           '<button class="check' + (on ? " on" : "") + '" data-a="setDone" data-v="' + i + "," + j + '" aria-pressed="' + on + '" aria-label="Set ' + (j + 1) + ' done">' + I.check + "</button></div>").join("");
-        return '<div class="card' + (doneCount === x.sets ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><h3 style="font-size:18px">' + esc(x.name) + '</h3><span class="small muted">' + doneCount + "/" + x.sets + '</span></div><p class="small muted">' + esc(x.cue) + "</p>" + rows + "</div>";
+        return '<div class="card' + (doneCount === x.sets ? '" style="background:var(--mint-soft);border-color:transparent' : "") + '"><div class="ex"><h3 style="font-size:18px">' + esc(x.name) + '</h3><span class="small muted">' + doneCount + "/" + x.sets + '</span></div>' + (window.BBF_FIGURE ? window.BBF_FIGURE(x.name) : "") + '<p class="small muted">' + esc(x.cue) + "</p>" + rows + "</div>";
       }).join("");
     }
     const timer = state.timer ? '<div class="timer" role="timer" aria-live="off"><span>Rest</span><b id="tleft">' + state.timer.left + 's</b><button data-a="skipRest">Skip</button></div>' : "";
