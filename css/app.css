@@ -87,6 +87,21 @@ p{margin:0}
 .check-row{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
 .check-row input{width:20px;height:20px;accent-color:var(--coral)}
 .fast-card{background:linear-gradient(135deg,#FFF8F0,#F3F8F6)}
+.spinner{width:42px;height:42px;border-radius:50%;border:4px solid var(--coral-soft);border-top-color:var(--coral);animation:spin .9s linear infinite;margin-bottom:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.moods{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.mood{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--bg);border:1.5px solid var(--line);border-radius:14px;padding:8px 2px;cursor:pointer;color:var(--ink)}
+.mood span{font-size:24px;line-height:1}.mood small{font-size:11px;font-weight:700;color:var(--muted)}
+.mood:active{border-color:var(--coral)}
+.mood-card{background:linear-gradient(135deg,#FBF4EE,#F2F7F5)}
+.moodweek{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.moodweek span{display:flex;flex-direction:column;gap:2px}.moodweek b{font-size:20px}.moodweek small{font-size:11px;color:var(--muted);font-weight:700}
+.tool{text-decoration:none;color:inherit}
+.breath{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px 0}
+.bcircle{width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#F7E3DD,#9ED3CF);box-shadow:0 10px 40px rgba(62,158,150,.25)}
+.btext{font-family:var(--display);font-weight:700;font-size:18px;text-align:center;min-height:48px}
+.steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:16px}
+textarea#jt{border-radius:14px;border:1.5px solid var(--line);padding:12px;font:inherit;background:var(--card);width:100%}
 /* welcome card */
 .hero-card{background:#FFFDF9;border:1px solid var(--line);border-radius:30px;overflow:hidden;box-shadow:0 24px 60px rgba(31,42,51,.08)}
 .hc-top{position:relative;padding:22px 20px 22px;background:linear-gradient(135deg,#F6E5DE 0%,#E6F2EF 55%,#F7F1DC 100%);display:flex;flex-direction:column;gap:8px}

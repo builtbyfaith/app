@@ -28,6 +28,14 @@
   const opt = (on, label, small, action, val) => '<button class="opt' + (on ? " on" : "") + '" data-a="' + action + '" data-v="' + esc(val) + '" aria-pressed="' + on + '">' + "<span>" + esc(label) + (small ? "<small>" + esc(small) + "</small>" : "") + '</span><span class="tk">' + I.check + "</span></button>";
 
   async function reload() { state.data = await S.load(); }
+  // Never hang on a slow or paused connection: give up after a few seconds and show a retry screen
+  // One broken card should never take down a whole screen
+  const safe = (fn) => { try { return fn(); } catch (e) { console.error("Card error:", e); return ""; } };
+  const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+  const loadingScreen = () => '<div class="screen no-nav" style="align-items:center;justify-content:center;text-align:center;min-height:70vh"><div class="spinner" aria-hidden="true"></div><p class="muted">Loading your plan…</p></div>';
+  function problemScreen(msg) {
+    return '<div class="screen no-nav" style="justify-content:center;min-height:70vh"><div class="top"><span class="eyebrow">Hang tight</span><h1 class="title">We couldn\'t open the app.</h1><p class="sub">' + esc(msg || "Check your connection and try again.") + '</p></div><button class="btn" data-a="retryLoad">Try again</button><button class="btn soft" data-a="signOut">Sign out</button></div>';
+  }
   // ---- memberships ----
   // Edit prices and the "what's included" lists here. Stripe prices must match.
   const TRIAL_DAYS = 3, FREE_WORKOUTS = 2;
@@ -367,9 +375,10 @@
       "</div>" +
       (away !== null && away >= 5 && !doneToday && !capped ? '<div class="card" style="background:var(--butter-soft);border-color:transparent"><h3>' + esc(E.affirmation("back")) + '</h3><p class="small">It\'s been ' + away + ' days. Let\'s ease back in with a gentle session.</p><button class="btn soft" data-a="energy" data-v="low">Start gently</button></div>' : "") +
       (raceW !== null && raceW >= 0 ? '<div class="card" style="background:var(--sky-soft);border-color:transparent"><span class="label">Race countdown</span><h3>' + (raceW === 0 ? "Race week. Trust your training." : raceW + " week" + (raceW === 1 ? "" : "s") + " to race day") + "</h3></div>" : "") +
-      (doneToday
+      safe(() => doneToday
         ? coachNote("workout", today() + ":" + d.workouts.filter(w => w.date === today()).length, "Coach Faith on today's workout", (d.workouts.filter(w => w.date === today()).slice(-1)[0] || {}).effort === "hard" ? "that workout was too hard, I struggled" : "I did it! I finished, I'm proud")
         : coachNote("daily", today(), "Coach Faith · today", away !== null && away >= 3 ? "I missed workouts and fell off" : plan.goalMet ? "I hit my goal this week" : state.energy === "low" ? "I am tired today" : "what should I do today workout", '<a class="link" href="#/coach" style="padding:0;align-self:flex-start">Talk with Coach Faith</a>')) +
+      safe(moodCard) +
       workoutCard +
       (nextMeal ? '<a class="card" href="#/eat" style="text-decoration:none;color:inherit;flex-direction:row;align-items:center"><span style="flex:1"><span class="label">Next meal</span><br><b>' + esc(nextMeal.recipe.name) + '</b><br><span class="small muted">' + nextMeal.recipe.protein + " g protein · " + nextMeal.recipe.minutes + " min</span></span>" + I.back.replace('d="M12.5 4l-6 6 6 6"', 'd="M7.5 4l6 6-6 6"') + "</a>" : "") +
       '<p class="small muted center">' + esc(C.PROGRAMS[E.mainProgram(p.setup)].tip) + "</p>", "today");
@@ -479,6 +488,11 @@
   }
 
   // ---------- progress ----------
+  function moodWeek() {
+    const days = []; for (let i = 6; i >= 0; i--) { const dt = new Date(Date.now() - i * 86400000), k = E.dateStr(dt), m = xOf(state.data.daily[k]).mood; days.push([dt.toLocaleDateString(undefined, { weekday: "narrow" }), m ? MOODS.find(x => x[0] === m)[1] : "·"]); }
+    if (!days.some(d => d[1] !== "·")) return "";
+    return '<div class="card"><div class="ex"><span class="label">Your mood this week</span><a class="link small" style="padding:0" href="#/reset">Feel better tools</a></div><div class="moodweek">' + days.map(d => '<span><b>' + d[1] + "</b><small>" + d[0] + "</small></span>").join("") + "</div></div>";
+  }
   function weeklyCard() {
     const d = state.data, ws = E.weekStart(), from = E.parseDate(today()).getTime() - 7 * 86400000;
     const recent = d.workouts.filter(w => E.parseDate(w.date).getTime() >= from);
@@ -522,6 +536,7 @@
     const recent = d.workouts.slice(-5).reverse();
     return page('<div class="top">' + flower("#9ED3CF", 34, "right:18px;top:24px") + '<span class="eyebrow">' + (total ? total + " workout" + (total === 1 ? "" : "s") + " so far" : "Your journey starts here") + '</span><h1 class="title">' + (total ? "You're growing stronger." : "Every journey starts with one step.") + "</h1>" +
       '<div class="stats"><div class="stat"><b>' + total + '</b><small>workouts</small></div><div class="stat"><b>' + weeks + '</b><small>weeks on track</small></div><div class="stat" style="background:var(--coral);color:#fff"><b>' + (gain > 0 ? "+" + gain : gain || 0) + '</b><small style="color:#fff">lb ' + esc(lift ? "on " + lift.split(" ").slice(-1)[0].toLowerCase() : "gained") + "</small></div></div></div>" +
+      moodWeek() +
       weeklyCard() +
       (full() ? liftCard : upsell("Strength charts", "See every lift climb week by week. Core also adds weight and reps for you as you get stronger.")) + bodyCard +
       (recent.length ? '<div class="card"><span class="label">Recent workouts</span><ul class="list small">' + recent.map(w => "<li><span style=\"flex:1\"><b>" + esc(w.name) + "</b><br><span class=\"muted\">" + E.parseDate(w.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " + w.minutes + " min</span></span><span class=\"chip\">" + ({ easy: "Easy", right: "Just right", hard: "Tough" }[w.effort] || "") + "</span></li>").join("") + "</ul></div>" : "") +
@@ -536,8 +551,8 @@
     const trialBar = saved ? '<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>' + (preview ? "AI Coach preview:</b> answers from your own plan during your trial" : "Coach Faith:</b> " + (basicCoach() ? "everyday encouragement" : "full library")) + '</span><a class="link" href="#/plans" style="padding:0;white-space:nowrap">' + (basicCoach() ? "See plans" : "Get AI Coach") + '</a></div>' : "";
     const msgs = d.coach.length ? d.coach : [{ role: "assistant", content: "Hi" + (firstName() ? " " + firstName() : "") + "! I'm your Built by Faith coach. I know your plan and I'm here to help you keep going, especially on the hard days. What's on your mind?" }];
     return page('<div class="top" style="padding-bottom:16px">' + flower("#9ED3CF", 28, "right:18px;top:24px") + '<span class="eyebrow">Your coach</span><h1 class="title" style="font-size:24px">Here for you, every step.</h1></div>' + trialBar +
-      (state.session ? '<a class="btn soft small" href="#/workout" style="align-self:flex-start">Back to your workout</a>' : "") + '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
-      (d.coach.length < 2 ? '<div class="starters">' + (tier() === "trial" ? ["My knees hurt and I only have 15 minutes", "I'm tired today", "What should I eat today?", "How am I doing?", "What's my workout today?"] : ["I'm tired today", "I fell off track", "Swap an exercise", "What should I eat?", "I need encouragement"]).map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
+      (state.session ? '<a class="btn soft small" href="#/workout" style="align-self:flex-start">Back to your workout</a>' : '<a class="btn soft small" href="#/reset" style="align-self:flex-start">' + I.flower + ' Feel better tools</a>') + '<div class="chat" id="chat" aria-live="polite">' + msgs.map(m => '<div class="msg ' + (m.role === "user" ? "me" : "ai") + '">' + esc(m.content) + "</div>").join("") + (state.typing ? '<div class="msg ai muted">Typing…</div>' : "") + "</div>" +
+      (d.coach.length < 2 ? '<div class="starters">' + (tier() === "trial" ? ["My knees hurt and I only have 15 minutes", "I'm frustrated", "What should I eat today?", "How am I doing?", "Help me calm down"] : ["I'm tired today", "I'm frustrated", "Help me calm down", "I fell off track", "What should I eat?", "I need encouragement"]).map(s => '<button data-a="starter" data-v="' + esc(s) + '">' + esc(s) + "</button>").join("") + "</div>" : "") +
       '<p class="small muted center" style="margin-bottom:70px">Your coach gives fitness encouragement, not medical advice.</p>' +
       (out ? "" : '<form class="composer" data-f="coach"><label for="cm" style="position:absolute;left:-9999px">Message your coach</label><input id="cm" autocomplete="off" placeholder="Message your coach" maxlength="600"><button class="btn small" type="submit">Send</button></form>'), "coach");
   }
@@ -549,7 +564,8 @@
     state.typing = true; render(); scrollChat();
     const plan = E.buildToday(p, d.workouts, {});
     const nt = wellness() ? nTotals(today()) : null, fsx = wellness() ? fastStatus() : null;
-    const context = { nutrition: nt ? nt.kcal + " cal, " + nt.protein + " g protein, " + nt.carbs + " g carbs, " + nt.fat + " g fat, " + nt.fiber + " g fiber, " + nt.water + " cups water so far today" + (nGoals().kcal ? " (goal " + nGoals().kcal + " cal)" : "") + ", protein goal " + nGoals().protein + " g" : "", fasting: fsx ? fsx.plan + " fasting, " + fsx.text : "", name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
+    const moodNow = xOf(state.data.daily[today()]).mood || "";
+    const context = { mood: moodNow, nutrition: nt ? nt.kcal + " cal, " + nt.protein + " g protein, " + nt.carbs + " g carbs, " + nt.fat + " g fat, " + nt.fiber + " g fiber, " + nt.water + " cups water so far today" + (nGoals().kcal ? " (goal " + nGoals().kcal + " cal)" : "") + ", protein goal " + nGoals().protein + " g" : "", fasting: fsx ? fsx.plan + " fasting, " + fsx.text : "", name: p.name, programs: (p.setup.programs || []).map(k => C.PROGRAMS[k].name), today: plan.name + " (" + plan.minutes + " min)", workoutsThisWeek: plan.doneWeek, weeklyGoal: plan.target, daysSinceLastWorkout: E.daysSinceLast(d.workouts), weeksOnTrack: E.weeksOnTrack(d.workouts, plan.target), totalWorkouts: d.workouts.length, lastEffort: ({ easy: "easy", right: "just right", hard: "tough" })[(d.workouts[d.workouts.length - 1] || {}).effort] || "", experience: p.setup.experience, place: p.setup.place, injuries: p.setup.injuries, diet: p.setup.diet, raceWeeks: E.raceWeeks(p.setup) };
     try {
       if (!hasCoach()) {
         let preview = null;
@@ -598,6 +614,77 @@
       '<button class="btn soft" data-a="editField" data-v="diet" data-back="#/recipes">Change my way of eating</button>', "eat");
   }
 
+  // ---------- Feel better toolkit (free for everyone, works offline) ----------
+  const MOODS = [["great", "😊", "Great"], ["good", "🙂", "Good"], ["okay", "😐", "Okay"], ["low", "😔", "Low"], ["stressed", "😣", "Stressed"]];
+  const MOOD_REPLY = {
+    great: ["Love that! Hold onto it and share some joy today.", "This is the day which the LORD hath made; we will rejoice and be glad in it. (Psalm 118:24)", "gratitude"],
+    good: ["Good days are worth noticing. Keep the momentum going.", "Every good gift and every perfect gift is from above. (James 1:17)", "gratitude"],
+    okay: ["Okay is okay. A short walk or your workout can lift it a little.", "The joy of the LORD is your strength. (Nehemiah 8:10)", "move"],
+    low: ["Thank you for being honest. Be gentle with yourself today; small steps count.", "The LORD is nigh unto them that are of a broken heart. (Psalm 34:18)", "compassion"],
+    stressed: ["That's a lot to carry. Let's calm your body first, then take the next small step.", "Come unto me, all ye that labour and are heavy laden, and I will give you rest. (Matthew 11:28)", "sigh"]
+  };
+  const BREATH = {
+    sigh: { rounds: 3, phases: [["Breathe in through your nose", 2000, 1.35], ["Sip a little more air", 1000, 1.5], ["Long, slow breath out", 6000, 0.85]] },
+    box: { rounds: 4, phases: [["Breathe in", 4000, 1.45], ["Hold", 4000, 1.45], ["Breathe out", 4000, 0.85], ["Hold", 4000, 0.85]] },
+    calm: { rounds: 6, phases: [["Breathe in", 4000, 1.45], ["Breathe out slowly", 6000, 0.85]] },
+    prayer: { rounds: 5, phases: [["Breathe in: “Be still…”", 4000, 1.45], ["Breathe out: “…and know that I am God.”", 6000, 0.85]] }
+  };
+  const TOOLS = [
+    { id: "sigh", time: "1 min", name: "Physiological sigh", why: "The fastest way to calm a racing body: a double inhale and a long exhale.", breath: "sigh" },
+    { id: "box", time: "2 min", name: "Box breathing", why: "In 4, hold 4, out 4, hold 4. Steadies nerves before a hard moment.", breath: "box" },
+    { id: "calm", time: "1 min", name: "4-6 calming breath", why: "Breathing out longer than you breathe in slows your heart.", breath: "calm" },
+    { id: "prayer", time: "1 min", name: "Breath prayer", why: "Rest your mind on God's Word with every breath. Psalm 46:10.", breath: "prayer" },
+    { id: "ground", time: "2 min", name: "5-4-3-2-1 grounding", why: "Pulls your mind out of a spiral and back into this moment.", steps: ["Name 5 things you can see.", "Notice 4 things you can feel, like your feet on the floor.", "Listen for 3 things you can hear.", "Find 2 things you can smell.", "Notice 1 thing you can taste.", "Take one slow breath. You're here, and you're safe."] },
+    { id: "name", time: "30 sec", name: "Name it to tame it", why: "Putting a feeling into one word helps your brain settle it.", feelings: ["Frustrated", "Anxious", "Sad", "Lonely", "Overwhelmed", "Tired", "Disappointed", "Hopeful"] },
+    { id: "compassion", time: "1 min", name: "Self-compassion break", why: "Speak to yourself the way you'd speak to a friend.", steps: ["Put a hand on your heart.", "Say: “This is a hard moment.”", "Say: “I'm not the only one who feels this.”", "Say: “May I be kind to myself right now.”", "Remember: you are loved, just as you are today."] },
+    { id: "thought", time: "2 min", name: "Check the thought", why: "Thoughts aren't always facts, especially when we're tired.", steps: ["Write down the thought that's bothering you.", "Ask: is this 100% true?", "Ask: what would I tell a friend who thought this?", "Write a kinder, truer version.", "Whatsoever things are true… think on these things. (Philippians 4:8)"] },
+    { id: "move", time: "1–10 min", name: "Move it out", why: "Stress lives in the body. Moving helps it pass.", steps: ["Shake out your arms and legs hard for 30 seconds.", "Roll your shoulders and unclench your jaw.", "If you can, take a 10-minute walk outside and look at things far away.", "Notice how you feel compared with before."] },
+    { id: "pmr", time: "5 min", name: "Muscle relaxation", why: "Tense and release to melt stress, great before bed.", steps: ["Squeeze your feet for 5 seconds, then let go.", "Tighten your legs for 5 seconds, then release.", "Tense your belly and hands, then release.", "Lift your shoulders to your ears, hold, then drop them.", "Scrunch your face, then soften it.", "Breathe slowly and notice how heavy and calm you feel."] },
+    { id: "dump", time: "5 min", name: "Brain dump", why: "Get every thought out of your head and onto the page. Saved only on this phone.", journal: "dump" },
+    { id: "gratitude", time: "2 min", name: "Three good things", why: "Write three good things from today and why they happened. Linked with better mood and sleep.", journal: "gratitude" }
+  ];
+  const jKey = k => "bbf_journal_" + k + "_" + ((state.user && state.user.id) || "demo");
+  function journal(k) { try { return JSON.parse(localStorage.getItem(jKey(k))) || []; } catch (e) { return []; } }
+  function moodCard() {
+    const day = state.data.daily[today()] || {}, mood = xOf(day).mood;
+    if (!mood || state.moodEdit) return '<div class="card mood-card"><span class="label">How are you feeling today?</span><div class="moods">' + MOODS.map(m => '<button class="mood" data-a="mood" data-v="' + m[0] + '"><span aria-hidden="true">' + m[1] + "</span><small>" + m[2] + "</small></button>").join("") + "</div></div>";
+    const r = MOOD_REPLY[mood], m = MOODS.find(x => x[0] === mood), tool = TOOLS.find(t => t.id === r[2]);
+    return '<div class="card mood-card"><div class="ex"><span class="label">Today you feel ' + m[2].toLowerCase() + " " + m[1] + '</span><button class="link small" style="padding:0" data-a="moodEdit">Change</button></div><p>' + esc(r[0]) + '</p><p class="small muted" style="font-style:italic">' + esc(r[1]) + '</p><a class="btn soft small" href="#/reset/' + tool.id + '">Try: ' + tool.name + " · " + tool.time + "</a></div>";
+  }
+  function resetScreen(id) {
+    const t = TOOLS.find(x => x.id === id);
+    if (!t) {
+      return page('<div class="top">' + flower("#9ED3CF", 30, "right:18px;top:20px") + '<span class="eyebrow">Feel better</span><h1 class="title">A calmer mind, a stronger you.</h1><p class="sub">Quick, proven ways to settle stress, frustration and worry. Free, private and always here.</p></div>' +
+        TOOLS.map(x => '<a class="card tool" href="#/reset/' + x.id + '"><div class="ex"><h3 style="font-size:17px">' + x.name + '</h3><span class="chip">' + x.time + '</span></div><p class="small muted">' + esc(x.why) + "</p></a>").join("") +
+        '<p class="note">If you feel low most days for two weeks or more, or hopeless, please talk with a doctor, counselor or pastor. If you\'re thinking about hurting yourself, call or text <b>988</b> any time.</p>' +
+        '<p class="center muted" style="font-family:var(--display);font-style:italic;font-weight:700">Peace I leave with you. (John 14:27)</p>', "coach");
+    }
+    let body = "";
+    if (t.breath) body = '<div class="breath"><div class="bcircle" id="bcircle"></div><p class="btext" id="btext">Tap start when you\'re ready.</p><button class="btn" data-a="breathe" data-v="' + t.breath + '">Start</button></div>';
+    else if (t.steps) body = '<ol class="steps">' + t.steps.map(x => "<li>" + esc(x) + "</li>").join("") + "</ol>";
+    else if (t.feelings) body = '<div class="chips">' + t.feelings.map(f => '<button class="chip filter" data-a="nameIt" data-v="' + f + '">' + f + "</button>").join("") + '</div><p class="note" id="nameit">Tap the word that fits. Then take one slow breath.</p>';
+    else if (t.journal) { const list = journal(t.journal).slice(-5).reverse();
+      body = '<form data-f="journal" data-k="' + t.journal + '" style="display:flex;flex-direction:column;gap:8px"><textarea id="jt" maxlength="1500" rows="5" placeholder="' + (t.journal === "gratitude" ? "1. \n2. \n3. " : "Write anything on your mind…") + '"></textarea><button class="btn" type="submit">Save</button></form>' +
+        (list.length ? '<div class="card"><span class="label">Recent · only on this phone</span><ul class="list small">' + list.map(e => "<li><span><b>" + esc(e.d) + "</b><br>" + esc(e.t).replace(/\n/g, "<br>") + "</span></li>").join("") + "</ul></div>" : ""); }
+    return page('<div class="top"><div class="row"><a class="icon-btn" href="#/reset" aria-label="Back to tools">' + I.back + '</a><span class="chip" style="background:#fff">' + t.time + '</span></div><span class="eyebrow">Feel better</span><h1 class="title">' + t.name + '</h1><p class="sub">' + esc(t.why) + "</p></div>" + body +
+      '<a class="btn soft" href="#/coach">Talk it through with Coach Faith</a>', "coach");
+  }
+  let breathRun = 0;
+  function runBreath(id) {
+    const b = BREATH[id], run = ++breathRun; let round = 0, i = 0;
+    const step = () => {
+      const c = document.getElementById("bcircle"), tx = document.getElementById("btext");
+      if (!c || run !== breathRun) return;
+      if (i >= b.phases.length) { i = 0; round++; }
+      if (round >= b.rounds) { tx.textContent = "Well done. Notice how you feel now."; c.style.transition = "transform 1.5s ease"; c.style.transform = "scale(1)"; return; }
+      const [label, ms, scale] = b.phases[i++];
+      tx.textContent = label + " · round " + (round + 1) + " of " + b.rounds;
+      c.style.transition = "transform " + ms + "ms ease-in-out"; c.style.transform = "scale(" + scale + ")";
+      setTimeout(step, ms);
+    };
+    step();
+  }
+
   // ---------- profile ----------
   function planRows(s) {
     const lbl = (key, v) => { const st = SETUP.find(x => x.key === key); if (!st || !st.opts) return v; const f = o => (st.opts.find(x => x[0] === o) || [o, o])[1]; return Array.isArray(v) ? (v.length ? v.map(f).join(", ") : "None") : f(v); };
@@ -638,7 +725,8 @@
       return;
     }
     if (!state.data) {
-      try { await reload(); }
+      root.innerHTML = loadingScreen();
+      try { await withTimeout(reload(), 15000); }
       catch (e) {
         console.error(e);
         root.innerHTML = page('<div class="top"><span class="eyebrow">Hang tight</span><h1 class="title">We couldn\'t load your plan.</h1><p class="sub">Check your connection and try again. If it keeps happening, the app may still be finishing setup.</p></div><button class="btn" data-a="retryLoad">Try again</button><button class="btn soft" data-a="signOut">Sign out</button><p class="small muted center">' + esc(e.message || "") + "</p>", null, "no-nav");
@@ -663,11 +751,17 @@
       if (!seen && state.data.trialStarted) { try { localStorage.setItem(k, "1"); } catch (e) {} return go("#/plans"); }
     }
     const screens = { today: todayScreen, plans, workout: workoutScreen, finish: finishScreen, eat: eatScreen, grocery: groceryScreen, progress: progressScreen, coach: coachScreen, profile: profileScreen };
+    if (["login", "signup", "welcome", "forgot", "result"].includes(route)) return go("#/today");
     if (route === "recipe") { root.innerHTML = recipeScreen(a); return; }
     if (route === "edit") { root.innerHTML = editScreen(a); return; }
     if (route === "recipes") { root.innerHTML = recipesScreen(); return; }
     if (route === "nutrition") { root.innerHTML = nutritionScreen(); return; }
-    root.innerHTML = (screens[route] || todayScreen)();
+    if (route === "reset") { breathRun++; root.innerHTML = resetScreen(a); return; }
+    try { root.innerHTML = (screens[route] || todayScreen)(); }
+    catch (e) {
+      console.error("Screen error on " + route + ":", e);
+      root.innerHTML = problemScreen("This screen hit a snag. Try again, or open your plans and come back.") ;
+    }
     if (route === "coach") { scrollChat(); if (state.ask) { const q = state.ask; state.ask = null; sendCoach(q); } }
   }
 
@@ -773,6 +867,10 @@
     foodToggle() { state.foodOpen = !state.foodOpen; render(); },
     async delFood(el) { const i = +el.dataset.v; await saveX(x => { x.foods = (x.foods || []).filter((_, j) => j !== i); }, "Food removed."); },
     async fastDone() { await saveX(x => { x.fast = true; }, "Fast complete. Your discipline is inspiring!"); },
+    async mood(el) { state.moodEdit = false; await saveX(x => { x.mood = el.dataset.v; }); },
+    moodEdit() { state.moodEdit = true; render(); },
+    breathe(el) { el.textContent = "Restart"; runBreath(el.dataset.v); },
+    nameIt(el) { const n = document.getElementById("nameit"); if (n) n.textContent = "You're feeling " + el.dataset.v.toLowerCase() + ". That's okay, and it will pass. Breathe out slowly, then do one kind thing for yourself."; },
     recipeFilter(el) { state.recipeSlot = el.dataset.v; render(); },
     editField(el) { state.setup = JSON.parse(JSON.stringify(state.data.profile.setup)); state.editBack = el.dataset.back || "#/profile"; go("#/edit/" + el.dataset.v); },
     async saveEdit() {
@@ -839,6 +937,12 @@
       await quick(d => { d.body = d.body.filter(b => b.date !== t).concat({ date: t, weight: w }).sort((a, b) => a.date.localeCompare(b.date)); }, () => S.addBody(t, w), "Weigh-in saved: " + w + " lb.");
     },
     async coach() { const v = val("cm"); document.getElementById("cm").value = ""; await sendCoach(v); },
+    journal(f) {
+      const k = f.dataset.k, t = val("jt").slice(0, 1500); if (!t) return toast("Write a few words first.");
+      const list = journal(k).concat({ d: new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }), t }).slice(-60);
+      try { localStorage.setItem(jKey(k), JSON.stringify(list)); } catch (e) {}
+      toast(k === "gratitude" ? "Saved. Thank God for every good thing." : "Saved. Your mind can rest now."); render();
+    },
     async food() {
       const n = val("fn").slice(0, 60), num = id => Math.max(0, Math.min(5000, Math.round(parseFloat(val(id)) || 0)));
       if (!n) return toast("Add the food's name.");
@@ -870,7 +974,7 @@
   root.addEventListener("submit", e => {
     const f = e.target.closest("[data-f]"); if (!f) return;
     e.preventDefault();
-    const fn = F[f.dataset.f]; if (fn) fn();
+    const fn = F[f.dataset.f]; if (fn) fn(f);
   });
   root.addEventListener("change", e => {
     const el = e.target;
@@ -881,22 +985,35 @@
       const y = window.scrollY; render(); window.scrollTo(0, y);
     }
   });
-  window.addEventListener("hashchange", render);
+
+  // Safety net: if anything unexpected breaks, show a friendly screen instead of a blank page
+  function rescue(err) {
+    console.error("App error:", err);
+    if (!root.innerHTML.trim() || root.querySelector(".spinner")) root.innerHTML = problemScreen("Something didn't load correctly. Please try again.");
+  }
+  window.addEventListener("error", e => rescue(e.error || e.message));
+  window.addEventListener("unhandledrejection", e => rescue(e.reason));
+  const safeRender = () => render().catch(rescue);
+  window.removeEventListener("hashchange", render);
+  window.addEventListener("hashchange", safeRender);
 
   (async function boot() {
+    root.innerHTML = loadingScreen();
     try {
-      state.user = await S.user();
+      state.user = await withTimeout(S.user(), 8000);
       if (state.user && /upgraded/.test(location.hash)) {
         for (let i = 0; i < 6; i++) { await reload(); if (state.data.plan !== "none") break; await new Promise(r => setTimeout(r, 2000)); }
         history.replaceState(null, "", "#/today");
       }
-    } catch (e) { toast(e.message); }
-    S.onAuth(async evt => {
-      if (evt === "PASSWORD_RECOVERY") { location.hash = "#/new-password"; return; }
-      const u = await S.user();
-      if (!!u !== !!state.user) { state.user = u; state.data = null; render(); }
-    });
+    } catch (e) { console.error("Sign-in check failed:", e); state.user = null; }
+    try {
+      S.onAuth(async evt => {
+        if (evt === "PASSWORD_RECOVERY") { location.hash = "#/new-password"; return; }
+        const u = await withTimeout(S.user(), 8000).catch(() => null);
+        if (!!u !== !!state.user) { state.user = u; state.data = null; safeRender(); }
+      });
+    } catch (e) { console.error(e); }
     if (!location.hash) location.hash = state.user ? "#/today" : "#/welcome";
-    render();
-  })();
+    safeRender();
+  })();;
 })();

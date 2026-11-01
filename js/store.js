@@ -101,13 +101,13 @@
         sb.from("body_logs").select("*").order("date"),
         sb.from("coach_messages").select("role,content,created_at").order("created_at").limit(60)
       ]);
-      const daily = {}; (must(dl) || []).forEach(r => daily[r.date] = r);
+      const daily = {}; (must(dl) || []).forEach(r => { if (r && r.date) daily[r.date] = r; });
       const prof = must(p) || { name: "", setup: null, settings: {}, progression: {} };
       const sub = must(s) || {};
       const plan = sub.plan || "none";
       const paidCoach = plan === "coach" && ["active", "trialing", "past_due"].includes(sub.status);
       return { profile: { name: prof.name || "", setup: prof.setup, settings: prof.settings || {}, progression: prof.progression || {} }, plan, status: sub.status || null, periodEnd: sub.current_period_end || null,
-        trialStarted: sub.trial_started_at || u.created || new Date().toISOString(), workouts: must(w) || [], daily, body: must(b) || [], coach: paidCoach ? (must(c) || []) : trialChat(u.id) };
+        trialStarted: sub.trial_started_at || u.created || new Date().toISOString(), workouts: (must(w) || []).filter(r => r && r.date), daily, body: (must(b) || []).filter(r => r && r.date && r.weight != null), coach: paidCoach ? (must(c) || []) : trialChat(u.id) };
     },
 
     async saveProfile(patch) {

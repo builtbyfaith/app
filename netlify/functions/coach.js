@@ -14,7 +14,7 @@ const list = (v) => Array.isArray(v) ? v.slice(0, 8).map(x => str(x, 40)).filter
 function cleanContext(c) {
   c = c && typeof c === "object" ? c : {};
   return { name: str(c.name, 40).split(" ")[0], programs: list(c.programs), today: str(c.today, 80), workoutsThisWeek: num(c.workoutsThisWeek), weeklyGoal: num(c.weeklyGoal),
-    daysSinceLastWorkout: num(c.daysSinceLastWorkout), weeksOnTrack: num(c.weeksOnTrack), totalWorkouts: num(c.totalWorkouts), lastEffort: str(c.lastEffort, 20), nutrition: str(c.nutrition, 220), fasting: str(c.fasting, 120), experience: str(c.experience, 20), place: list(c.place), injuries: list(c.injuries), diet: str(c.diet, 30), raceWeeks: num(c.raceWeeks) };
+    daysSinceLastWorkout: num(c.daysSinceLastWorkout), weeksOnTrack: num(c.weeksOnTrack), totalWorkouts: num(c.totalWorkouts), lastEffort: str(c.lastEffort, 20), nutrition: str(c.nutrition, 220), fasting: str(c.fasting, 120), mood: str(c.mood, 30), experience: str(c.experience, 20), place: list(c.place), injuries: list(c.injuries), diet: str(c.diet, 30), raceWeeks: num(c.raceWeeks) };
 }
 
 exports.handler = async (event) => {

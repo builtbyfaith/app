@@ -111,6 +111,8 @@
       const raceQ = has(t, ["race", "5k", "10k", "marathon", "run "]);
       const calQ = has(t, ["calorie", "calories", "macro", "carbs", " fat ", "how much have i eaten", "how much did i eat", "water", "hydrat", "intake", "track"]);
       const fastQ = has(t, ["fast", "intermittent", "eating window", "16:8", "14:10", "18:6", "12:12", "skip breakfast"]);
+      // Feelings and life questions get the caring saved replies, not plan numbers
+      if (has(t, ["frustrat", "angry", "anger", "annoyed", "overwhelm", "anxious", "anxiety", "panic", "lonely", "sad", "depressed", "worry", "overthink", "racing", "not good enough", "stress", "burn", "purpose", "career", "relationship", "boundar", "family", "grief", "cry"])) return null;
       if (/(kill myself|suicide|end my life|hurt myself|self[- ]harm|want to die)/.test(t) || has(t, ["chest pain", "can't breathe", "fainted"])) return null; // safety answers come from the saved library
 
       if (calQ) {

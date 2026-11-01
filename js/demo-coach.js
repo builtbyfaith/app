@@ -40,6 +40,66 @@
       "I'm not able to give medical or medication advice{name}, but your doctor can, and it's worth asking. Until then, keep moving only in ways that feel good. You're taking care of yourself, and that's exactly right."
     ] },
 
+    { id: "frustrated", weight: 2, words: ["frustrat", "annoyed", "irritated", "fed up", "so mad", "angry", "anger", "furious", "pissed", "rage", "had it", "sick of"], replies: [
+      "That sounds really frustrating{name}, and it makes sense you feel that way. Try a physiological sigh: breathe in through your nose, take a second short sip of air on top, then let it out slowly through your mouth. Do it two or three times. It's one of the fastest ways to calm your body.",
+      "Frustration is energy looking for somewhere to go{name}. Put it to work: a brisk 10-minute walk, or shake out your arms and legs hard for 30 seconds. Moving it through your body often takes the edge off faster than thinking it through.",
+      "I hear you{name}. Try naming it in one word: \"frustrated,\" \"disappointed,\" \"overlooked.\" Simply naming a feeling helps your brain settle it. Then ask: what's one small thing I can control right now?",
+      "Before you respond to whatever set you off{name}, give it 90 seconds. A strong emotion's first wave usually passes in about that long if you breathe and don't feed it. Then decide what you want to do with a calmer mind.",
+      "It's okay to be upset{name}. Anger often points to something that matters to you. Write it all down for 5 minutes without editing, then tear it up or close the notebook. Be ye angry, and sin not (Ephesians 4:26). Feeling it is human; you get to choose what comes next.",
+      "Let's widen the lens{name}. Look out a window or across the room and soften your eyes to take in the whole view for 30 seconds. A wider gaze tells your nervous system you're safe. Then take one slow breath and tell me what happened, if you'd like."
+    ] },
+    { id: "overthinking", weight: 2, words: ["overthink", "racing thoughts", "can't stop thinking", "cant stop thinking", "ruminat", "spiral", "racing", "mind keeps", "my mind", "my mind won't", "my mind wont", "what if", "worrying", "worry"], replies: [
+      "A busy mind is exhausting{name}. Try a brain dump: write every thought down for 5 minutes, no order needed. Getting them on paper tells your brain it doesn't have to hold them all at once.",
+      "Try scheduled worry time{name}. When a worry pops up, jot it down and save it for a set 15 minutes later today. Most worries feel smaller by then, and you've given yourself permission to rest in between.",
+      "Let's check that thought{name}. Ask: is this 100% true? What would I tell a friend who thought this? What's another way to see it? Thoughts are not always facts, especially when we're tired.",
+      "Ground yourself with 5-4-3-2-1{name}: name 5 things you see, 4 you can feel, 3 you hear, 2 you smell and 1 you taste. It pulls your attention out of the spin and back into this moment.",
+      "Cast all your care upon Him, for He careth for you (1 Peter 5:7){name}. Try a breath prayer: breathe in \"Be still,\" breathe out \"and know that I am God.\" Repeat slowly for one minute."
+    ] },
+    { id: "panic", weight: 2, words: ["panic", "panic attack", "freaking out", "can't calm down", "cant calm down", "heart is pounding", "heart pounding", "shaking", "hyperventilat"], replies: [
+      "You're safe right now{name}, and this feeling will pass. Breathe out slowly, longer than you breathe in: in for 4, out for 6 or 8. Long exhales slow your heart. Keep going for a minute.",
+      "Let's ground together{name}. Press your feet into the floor and notice the weight of your body. Name 5 things you can see out loud. Waves of panic peak and fall, usually within minutes.",
+      "Try box breathing{name}: in for 4, hold for 4, out for 4, hold for 4. Trace a square with your finger as you go. If panic happens often, a doctor or counselor can help a lot, and that's a strong step.",
+      "Hum a song you love, slowly{name}, or say a verse quietly: \"What time I am afraid, I will trust in thee\" (Psalm 56:3). Humming and slow speaking both help settle your body. If you have chest pain or trouble breathing that doesn't pass, call 911."
+    ] },
+    { id: "lonely", weight: 2, words: ["lonely", "alone", "no friends", "isolated", "no one cares", "nobody cares", "left out"], replies: [
+      "Feeling lonely is so hard{name}, and it doesn't mean something is wrong with you. One small step: text one person today, even just \"thinking of you.\" Connection often starts with a tiny message.",
+      "You matter, and you're not alone{name}. A walk somewhere with people around, a class, a church small group or a volunteer shift are gentle ways to feel connected without pressure. Which one feels most doable?",
+      "I will never leave thee, nor forsake thee (Hebrews 13:5){name}. While you reach out to others, be a kind friend to yourself too: a good meal, a walk outside, your favorite music.",
+      "Group workouts and walking buddies are great for both body and heart{name}. Would you be open to inviting one person to walk with you this week?"
+    ] },
+    { id: "worth", weight: 2, words: ["not good enough", "worthless", "imposter", "insecure", "self esteem", "self-esteem", "confidence", "i'm a failure", "im a failure", "useless", "i suck"], replies: [
+      "Those words are heavy{name}, and they're not the whole truth about you. Try this: what would you say to a friend who felt this way? Now say it to yourself. You deserve that same kindness.",
+      "Try a self-compassion break{name}: put a hand on your heart and say, \"This is hard. I'm not the only one who feels this. May I be kind to myself right now.\" It sounds simple, and research shows it really helps.",
+      "Confidence grows from keeping small promises to yourself{name}. Pick one tiny thing today and do it: a 10-minute walk, a glass of water, one set. Then notice that you did it.",
+      "You are fearfully and wonderfully made (Psalm 139:14){name}. Your worth was settled before you ever lifted a weight or reached a goal. Write down three things you did well this week, however small."
+    ] },
+    { id: "purpose", words: ["purpose", "direction", "my life", "career", "job", "calling", "stuck in life", "what should i do with", "big decision", "decide", "decision", "goal", "goals", "dream"], replies: [
+      "Let's think it through together{name}. Picture yourself a year from now feeling proud. What's different? Pick one small step this week that moves toward that picture.",
+      "When a decision feels big{name}, write each option with three columns: what it gives you, what it costs you, and how it fits what matters most to you. Then pray on it and talk with someone wise you trust.",
+      "Big goals get done in small steps{name}. Break yours into one action you can do in 20 minutes or less, and put it on your calendar. Commit thy works unto the LORD, and thy thoughts shall be established (Proverbs 16:3).",
+      "Purpose often shows up where your gifts meet what you care about{name}. What do people thank you for? What lights you up? Those are good clues for your next step.",
+      "Feeling stuck is a normal part of growing{name}. Try a tiny experiment instead of a giant leap: a conversation, a class, a volunteer day. Experiments teach you what fits."
+    ] },
+    { id: "habits", words: ["habit", "routine", "consistent", "consistency", "discipline", "morning routine", "stick to", "keep forgetting", "schedule"], replies: [
+      "Make it tiny and attach it to something you already do{name}: \"After I pour my coffee, I'll do 10 squats.\" Habits stick when they're easy and have a clear cue.",
+      "Try the 2-minute rule{name}: start any habit with a version that takes 2 minutes. Put on your shoes, open your workout, fill your water bottle. Starting is the hardest part.",
+      "Never miss twice{name}. One missed day is life; just make the next day happen, even in a small way. That one rule protects your streak better than perfection.",
+      "Set your space up for success{name}: workout clothes laid out, water on your desk, fruit on the counter. Your environment does half the work for you.",
+      "Track it where you can see it{name}. Checking off a habit gives your brain a small reward that makes you want to do it again. Your Today screen is a great place to start."
+    ] },
+    { id: "boundaries", words: ["boundar", "say no", "people pleas", "relationship", "husband", "wife", "boyfriend", "girlfriend", "my kids", "family", "coworker", "my boss", "conflict", "argument", "argue"], replies: [
+      "Relationships can be the hardest part of life{name}. Before a hard conversation, take a slow breath and lead with how you feel, not what they did wrong: \"I feel overwhelmed when…\" It keeps the door open.",
+      "Saying no can be loving{name}. Try: \"I can't this week, but I can on Saturday.\" A kind, clear no protects your yes for what matters most.",
+      "You can't pour from an empty cup{name}. Taking time for your health isn't selfish; it helps you show up better for the people you love.",
+      "If a conversation gets heated{name}, it's okay to pause: \"I want to talk about this, and I need 20 minutes to calm down first.\" Then take a walk and come back. Be swift to hear, slow to speak, slow to wrath (James 1:19).",
+      "Try to listen until the other person feels heard{name}, then share your side. And if something keeps hurting you, a counselor or pastor can be a great help."
+    ] },
+    { id: "gratitude", words: ["grateful", "gratitude", "thankful", "blessed", "peace", "joy", "happy today", "feeling good", "great day"], replies: [
+      "I love this{name}! Hold onto it: write down three good things from today and why they happened. Doing this before bed is linked with better mood and sleep.",
+      "Joy looks good on you{name}. Share it: send a quick thank-you text to someone who helped you this week. Gratitude grows when it's spoken.",
+      "This is the day which the LORD hath made; we will rejoice and be glad in it (Psalm 118:24){name}. Let today's good energy carry into a walk or your workout.",
+      "Celebrate this moment{name}. Good days are fuel for harder ones, so notice what made today great and do more of it."
+    ] },
     { id: "win", words: ["did it", "finished", "completed", "pr", "personal record", "new record", "heavier", "lifted more", "first time", "proud", "i went", "i ran", "i walked", "hit my", "made it", "streak", "lost", "down a size", "clothes fit"], replies: [
       "Yes{name}! That's real strength you built with your own effort. Take a moment to enjoy it, because you earned it. Keep the same weight next time and make every rep smooth.",
       "I'm cheering out loud for you{name}! This is what consistency looks like. Write down how it felt, so on a hard day you can remember this one. The joy of the LORD is your strength.",
@@ -58,7 +118,7 @@
       "Rest matters as much as reps{name}. Strength training helps sleep over time, so you're on the right road. Tonight, try a cool dark room and a few slow breaths with a short prayer of thanks.",
       "Rough night? Let's not ask too much of you today{name}. A shorter session or a walk is plenty. Your body does its rebuilding while you rest."
     ] },
-    { id: "stress", words: ["stress", "anxious", "anxiety", "worried", "overwhelm", "busy week", "chaos", "too much going on", "panic"], replies: [
+    { id: "stress", words: ["stress", "anxious", "anxiety", "worried", "overwhelm", "busy week", "chaos", "too much going on", "burnout", "burned out", "burnt out", "too much on my plate"], replies: [
       "That's a lot to carry{name}. Movement is one of the best stress relievers we have, even 10 minutes. Breathe slowly between sets and let this be time just for you. Be careful for nothing; but in every thing by prayer, let your requests be made known unto God.",
       "When life feels full, keep the plan small{name}. Do the 20-minute version today and call it a full win. You don't have to do everything to do something good.",
       "I'm sorry it's such a heavy season{name}. Try this: three slow breaths, a quick prayer, then just your warm-up. Often that's enough to shift the whole day."
@@ -81,7 +141,7 @@
       "Think about how you'll feel an hour from now if you move today{name}. That version of you will be so glad. Commit thy works unto the LORD, and thy thoughts shall be established.",
       "Let's make it easy{name}: favorite song on, water bottle filled, first set started. That's all I'm asking for right now."
     ] },
-    { id: "sad", words: ["sad", "down", "depressed", "lonely", "cry", "crying", "bad day", "rough day", "hard day", "grief", "lost my"], replies: [
+    { id: "sad", words: ["sad", "down", "depressed", "cry", "crying", "bad day", "rough day", "hard day", "grief", "lost my"], replies: [
       "I'm so sorry you're having a hard day{name}. Be gentle with yourself; a slow walk outside or some light stretching can lift the heart a little. If this heaviness sticks around, please talk with someone you trust or your doctor.",
       "That sounds really hard{name}. You don't have to perform today. A short walk and some deep breaths count, and so does rest. Come unto me, all ye that labour and are heavy laden, and I will give you rest.",
       "Thank you for telling me{name}. Hard days are part of every journey, and they don't define you. Take care of the basics today: water, a good meal, a little movement, and some kindness toward yourself."
